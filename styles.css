@@ -1,0 +1,20 @@
+body {
+    color: rgb(255, 225, 0);
+    font-family:"Comic Sans MS", "Comic Sans", cursive, sans-serif;
+    min-height: 100vh;
+    display:flex;
+    margin: 0;
+    padding: 0 1rem;
+    flex-direction: column;
+    justify-content: flex-start;
+    align-items: center;
+    background-color:black;
+}
+p {
+
+    font-size:2rem;
+}
+h1 {
+    font-size: clamp(2rem, 12vw, 6rem);
+    margin-bottom: 10px;
+}   
