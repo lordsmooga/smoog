@@ -1,20 +1,63 @@
 body {
     color: rgb(255, 225, 0);
-    font-family:"Comic Sans MS", "Comic Sans",sans-serif;
+    font-family: "Comic Sans MS", "Comic Sans", sans-serif;
     min-height: 100vh;
-    display:flex;
+    display: flex;
     margin: 0;
     padding: 0 1rem;
     flex-direction: column;
     justify-content: flex-start;
     align-items: center;
-    background-color:black;
+    background-color: black;
 }
+
 p {
 
-    font-size:2rem;
+    font-size: 2rem;
 }
+
 h1 {
     font-size: clamp(2rem, 12vw, 6rem);
     margin-bottom: 10px;
-}   
+}
+
+#smoog {
+    opacity: 0;
+    transition: opacity 0.4s;
+}
+
+#smoog.visible {
+    opacity: 1;
+}
+
+#net {
+    opacity: 0;
+    transition: opacity 0.4s;
+}
+
+#net.visible {
+    opacity: 1;
+}
+
+#content {
+    opacity: 0;
+    transition: opacity 0.4s;
+}
+
+#content.visible {
+    opacity: 1;
+}
+
+#gate {
+    color: rgb(255, 225, 0);
+    font-family: "Comic Sans MS", "Comic Sans", sans-serif;
+    font-size: large;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0 1rem;
+}
+
+#gate.gone {
+    display: none;
+}
