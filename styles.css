@@ -1,128 +1,294 @@
-/* ---------- base ---------- */
+/* =====================================================================
+   SMOOGNET — circa 2000, in black and yellow
+   ===================================================================== */
+:root {
+    --y: rgb(255, 225, 0);   /* main yellow */
+    --y-dim: #8f7e00;        /* borders, quiet text */
+    --y-dark: #2a2500;       /* bands */
+    --panel: #0f0d00;        /* box backgrounds */
+}
+
+* {
+    box-sizing: border-box;
+}
+
 body {
-    color: rgb(255, 225, 0);
-    background-color: black;
-    font-family: "Comic Sans MS", "Comic Sans", sans-serif;
     margin: 0;
-    padding: 0 1rem;
+    background: black;
+    color: var(--y);
+    font: 13px/1.45 Verdana, Tahoma, Geneva, sans-serif;
 }
 
 a {
-    color: inherit;
+    color: var(--y);
+    font-weight: bold;
 }
 
-/* ---------- SMOOGNET title ---------- */
-header {
-    text-align: center;
-}
-
-h1 {
-    font-size: clamp(2rem, 12vw, 6rem);
-    margin: 0.67em 0 10px;
-}
-
-#home-link {
-    display: inline-block; /* lets us move it with transform */
+a:hover {
     text-decoration: none;
 }
 
-#smoog,
-#net {
-    opacity: 0;
-    transition: opacity 0.4s;
-}
-
-#smoog.visible,
-#net.visible {
-    opacity: 1;
-}
-
-/* after the intro: title sits small in the top-left */
-body.docked header {
-    text-align: left;
-}
-
-body.docked h1 {
-    font-size: 2rem;
-    margin: 1rem 0;
-}
-
-/* ---------- gate ---------- */
-#gate {
-    display: block;
+#page {
+    max-width: 980px;
     margin: 0 auto;
-    color: rgb(255, 225, 0);
-    font-family: inherit;
-    font-size: large;
+    min-height: 100vh;
+    border-left: 1px solid var(--y-dim);
+    border-right: 1px solid var(--y-dim);
+}
+
+/* ---------- masthead ---------- */
+#masthead {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 6px 12px;
+}
+
+#logo {
+    font-family: "Arial Black", "Arial Bold", Gadget, sans-serif;
+    font-size: 46px;
+    font-style: italic;
+    letter-spacing: -2px;
+    line-height: 1;
+    text-decoration: none;
+}
+
+#promo {
+    flex: 1;
+    font-size: 12px;
+}
+
+#promo a {
+    display: block;
+}
+
+#today {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-left: auto;
+}
+
+#date {
+    text-align: right;
+    font-weight: bold;
+    line-height: 1;
+    white-space: nowrap;
+}
+
+#date .weekday {
+    font-size: 11px;
+    letter-spacing: 2px;
+    color: var(--y-dim);
+    margin-bottom: 4px;
+}
+
+#date .month {
+    font-size: 17px;
+}
+
+#date .day {
+    font-size: 34px;
+}
+
+/* Smooga: face on top, jaw underneath slides down to talk */
+#buddy {
+    position: relative;
+    width: 107px;
+    height: 107px;
+    flex: none;
     background: none;
     border: none;
+    padding: 0;
     cursor: pointer;
-    padding: 0 1rem;
 }
 
-#gate.gone {
+#buddy img {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    image-rendering: pixelated; /* keep the pixels chunky */
+}
+
+/* ---------- quote of the day ---------- */
+#qotd-bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 6px 12px;
+    background: var(--y-dark);
+    border-top: 2px solid var(--y);
+    border-bottom: 1px solid var(--y-dim);
+}
+
+.qotd-label {
+    font-size: 15px;
+    font-weight: bold;
+    white-space: nowrap;
+}
+
+.qotd-label small {
+    font-size: 11px;
+}
+
+#qotd {
+    flex: 1;
+    padding: 4px 8px;
+    background: black;
+    border: 2px inset var(--y-dim);
+    font-style: italic;
+}
+
+#qotd .by {
+    font-style: normal;
+    color: var(--y-dim);
+}
+
+#qotd .qedit {
+    float: right;
+    font-style: normal;
+    font-size: 11px;
+}
+
+/* ---------- tabs ---------- */
+#tabs {
+    display: flex;
+    border-bottom: 2px solid var(--y);
+}
+
+#tabs a[data-tab] {
+    padding: 6px 22px;
+    font-size: 15px;
+    border-right: 1px solid var(--y-dim);
+}
+
+#tabs a.active {
+    background: var(--y);
+    color: black;
+    text-decoration: none;
+}
+
+#signin {
+    margin-left: auto;
+    align-self: center;
+    padding: 0 12px;
+    font-size: 11px;
+}
+
+#subbar {
+    min-height: 26px;
+    padding: 4px 12px;
+    background: var(--y-dark);
+    border-bottom: 1px solid var(--y-dim);
+    font-size: 12px;
+}
+
+#subbar a {
+    margin-right: 18px;
+}
+
+/* ---------- columns ---------- */
+#layout {
+    display: grid;
+    grid-template-columns: 180px minmax(0, 1fr);
+    gap: 12px;
+    padding: 12px;
+}
+
+#layout.with-right {
+    grid-template-columns: 180px minmax(0, 1fr) 210px;
+}
+
+#rightcol:empty {
     display: none;
 }
 
-/* ---------- page content ---------- */
-#content {
-    max-width: 720px;
-    margin: 0 auto;
-    padding-bottom: 160px; /* room so the buddy never covers the end of a page */
-    font-size: 1.15rem;
-    line-height: 1.5;
-    opacity: 0;
-    visibility: hidden;
-    transition: opacity 0.4s, visibility 0.4s;
+/* ---------- boxes ---------- */
+.panel {
+    margin-bottom: 12px;
+    background: var(--panel);
+    border: 1px solid var(--y-dim);
 }
 
-#content.visible {
-    opacity: 1;
-    visibility: visible;
+.panel-head {
+    padding: 3px 8px;
+    background: var(--y);
+    color: black;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
 }
 
-.tagline {
-    font-size: 2rem;
+.panel-body {
+    padding: 8px 10px;
+}
+
+.panel-body > :first-child {
     margin-top: 0;
 }
 
+.panel-body > :last-child {
+    margin-bottom: 0;
+}
+
+.navlist {
+    margin: 0;
+    padding-left: 18px;
+    list-style: circle;
+}
+
+.navlist li {
+    margin: 4px 0;
+}
+
 .muted {
-    opacity: 0.6;
+    color: var(--y-dim);
 }
 
 .error {
     color: #ff6b6b;
 }
 
-/* post list */
-.post-list {
-    list-style: none;
-    padding: 0;
+h2 {
+    margin: 0 0 2px;
+    font-size: 20px;
+    line-height: 1.25;
 }
 
-.post-list li {
-    margin-bottom: 1rem;
-}
-
-.post-list a {
-    font-size: 1.4rem;
+h3 {
+    margin: 14px 0 6px;
+    font-size: 13px;
+    text-transform: uppercase;
 }
 
 .date {
+    color: var(--y-dim);
+    font-size: 11px;
+    margin-bottom: 8px;
+}
+
+/* home page feature */
+.thumb {
+    float: left;
+    width: 160px;
+    height: 120px;
+    object-fit: cover;
+    margin: 0 12px 6px 0;
+    border: 1px solid var(--y-dim);
+}
+
+.featured::after {
+    content: "";
     display: block;
-    font-size: 0.9rem;
-    opacity: 0.6;
+    clear: both;
 }
 
-/* single post */
-.post h2 {
-    font-size: 2rem;
-    margin: 0;
-    line-height: 1.2;
-}
-
-.post .date {
-    margin-bottom: 1.5rem;
+/* posts */
+.post-body {
+    font-size: 14px;
+    line-height: 1.6;
 }
 
 .post-body img,
@@ -130,92 +296,205 @@ body.docked h1 {
     display: block;
     max-width: 100%;
     height: auto;
-    margin: 1rem 0;
+    margin: 12px 0;
+    border: 1px solid var(--y-dim);
 }
 
-/* buttons: bracket style, like the gate */
-.btn {
-    color: inherit;
-    font: inherit;
-    background: none;
-    border: none;
+/* comments */
+.comments {
+    margin: 0;
     padding: 0;
-    margin: 0 1rem 0.5rem 0;
-    cursor: pointer;
-    text-decoration: none;
+    list-style: none;
 }
 
-.btn:hover {
-    text-decoration: underline;
+.comment {
+    padding: 8px 0;
+    border-bottom: 1px dotted var(--y-dim);
 }
 
-.btn:disabled {
-    opacity: 0.4;
-    cursor: default;
-    text-decoration: none;
+.meta {
+    margin-bottom: 2px;
 }
 
-.btn.danger {
-    color: #ff6b6b;
+.stamp {
+    color: var(--y-dim);
+    font-size: 11px;
 }
 
-.admin-bar {
-    margin: 1rem 0;
+.text {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
 }
 
-/* forms */
+.replies {
+    margin: 8px 0 0 16px;
+    padding: 0;
+    list-style: none;
+}
+
+.reply {
+    padding: 4px 0 4px 10px;
+    border-left: 3px solid var(--y);
+}
+
+.tag {
+    padding: 0 4px;
+    background: var(--y);
+    color: black;
+    font-size: 10px;
+    font-weight: bold;
+    text-transform: uppercase;
+}
+
+.admin-row {
+    margin-top: 4px;
+}
+
+/* honeypot: hidden from people, visible to spam bots */
+.hp {
+    position: absolute;
+    left: -9999px;
+}
+
+/* ---------- forms ---------- */
 label {
     display: block;
-    margin: 1rem 0 0.25rem;
+    margin: 8px 0 2px;
+    font-weight: bold;
 }
 
 input[type="text"],
 input[type="password"],
 textarea {
     width: 100%;
-    box-sizing: border-box;
+    padding: 4px 6px;
     background: black;
-    color: inherit;
+    color: var(--y);
     font: inherit;
-    border: 2px solid rgb(255, 225, 0);
-    padding: 0.5rem;
+    border: 2px inset var(--y-dim);
 }
 
 textarea {
-    min-height: 50vh;
     resize: vertical;
 }
 
-.hint {
-    font-size: 0.9rem;
-    opacity: 0.6;
-    margin: 0.25rem 0 1rem;
+.editor-body {
+    min-height: 45vh;
 }
 
-/* ---------- buddy in the bottom-right corner ---------- */
-#buddy {
-    display: none; /* hidden during the intro */
-    position: fixed;
-    right: 0.5rem;
-    bottom: 0.5rem;
-    width: 128px;
-    height: 128px;
-    background: none;
-    border: none;
-    padding: 0;
+.hint {
+    color: var(--y-dim);
+    font-size: 11px;
+}
+
+/* chunky Windows-98 buttons */
+.btn {
+    display: inline-block;
+    margin: 0 6px 6px 0;
+    padding: 3px 10px;
+    background: var(--y);
+    color: black;
+    font: bold 12px Verdana, Tahoma, sans-serif;
+    text-decoration: none;
+    border: 2px outset #fff3a0;
     cursor: pointer;
 }
 
-body.docked #buddy {
-    display: block;
+.btn:active {
+    border-style: inset;
 }
 
-/* face and jaw stacked on the same spot; jaw is underneath and slides down to talk */
-#buddy img {
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 100%;
-    height: 100%;
-    image-rendering: pixelated; /* keep the pixels chunky instead of blurry */
+.btn:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+.btn.small {
+    padding: 0 6px;
+    font-size: 11px;
+}
+
+/* MSN-style round "go" button */
+.go {
+    width: 28px;
+    height: 28px;
+    margin-left: 6px;
+    border-radius: 50%;
+    border: 2px outset #fff3a0;
+    background: var(--y);
+    color: black;
+    font: bold 12px Verdana, sans-serif;
+    cursor: pointer;
+}
+
+.inline-form {
+    display: flex;
+    align-items: center;
+}
+
+/* ---------- footer ---------- */
+#footer {
+    padding: 6px 12px;
+    background: var(--y-dark);
+    border-top: 2px solid var(--y);
+    color: var(--y-dim);
+    font-size: 11px;
+    text-align: center;
+}
+
+/* ---------- phones ---------- */
+@media (max-width: 720px) {
+    #masthead {
+        gap: 8px;
+    }
+
+    #logo {
+        font-size: 30px;
+    }
+
+    #promo {
+        display: none;
+    }
+
+    #buddy {
+        width: 80px;  /* drops a few pixels, but fits */
+        height: 80px;
+    }
+
+    #date .day {
+        font-size: 26px;
+    }
+
+    #date .month {
+        font-size: 14px;
+    }
+
+    #qotd-bar {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 4px;
+    }
+
+    #tabs a[data-tab] {
+        padding: 8px 12px;
+        font-size: 14px;
+    }
+
+    #layout,
+    #layout.with-right {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    #content {
+        order: -1; /* main stuff first, side boxes after */
+    }
+
+    #layout.with-right #leftnav {
+        display: none; /* home already lists posts */
+    }
+
+    .thumb {
+        width: 110px;
+        height: 82px;
+    }
 }

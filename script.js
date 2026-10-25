@@ -1,83 +1,28 @@
 // =====================================================================
-//  INTRO — click gate, SMOOG, NET, then the title docks top-left
+//  SMOOGNET — the whole front end
 // =====================================================================
-const gate = document.getElementById("gate");
-const smoog = document.getElementById("smoog");
-const net = document.getElementById("net");
-const homeLink = document.getElementById("home-link");
 const content = document.getElementById("content");
-const smoogSound = new Audio("audio/smoog.mp3");
-const netSound = new Audio("audio/net.mp3");
+const leftnav = document.getElementById("leftnav");
+const rightcol = document.getElementById("rightcol");
+const layout = document.getElementById("layout");
+const subbar = document.getElementById("subbar");
+const signin = document.getElementById("signin");
+const promo = document.getElementById("promo");
+const qotdBox = document.getElementById("qotd");
+const dateBox = document.getElementById("date");
 
-const SMOOG_DELAY = 500;
-const NET_DELAY = 1500;
-const DOCK_DELAY = 2500;
+const OWNER = "smoog"; // your name on comment replies (matches OWNER_NAME in functions/_lib.js)
 
-function unlock(sound) {
-    sound.play().catch(() => { });
-    sound.pause();
-    sound.currentTime = 0;
-}
-
-// Moves the title to the top-left. With animate=true it slides there:
-// measure where it is, snap it to the new spot, then use a transform
-// to make it *look* like it's still in the old spot and let it ease home.
-function dock(animate) {
-    const first = homeLink.getBoundingClientRect();
-    document.body.classList.add("docked");
-    if (!animate) return;
-
-    const last = homeLink.getBoundingClientRect();
-    const scale = first.width / last.width;
-    homeLink.style.transformOrigin = "top left";
-    homeLink.style.transform =
-        `translate(${first.left - last.left}px, ${first.top - last.top}px) scale(${scale})`;
-    homeLink.getBoundingClientRect(); // force the browser to apply that before animating
-    homeLink.style.transition = "transform 0.6s ease";
-    homeLink.style.transform = "";
-}
-
-function finishIntro(animate) {
-    gate.classList.add("gone");
-    smoog.classList.add("visible");
-    net.classList.add("visible");
-    dock(animate);
-    content.classList.add("visible");
-    try { sessionStorage.setItem("introSeen", "1"); } catch { }
-}
-
-let introSeen = false;
-try { introSeen = sessionStorage.getItem("introSeen") === "1"; } catch { }
-
-if (introSeen) {
-    // already watched it this visit (e.g. you refreshed) — skip straight in
-    finishIntro(false);
-} else {
-    gate.addEventListener("click", () => {
-        unlock(smoogSound);
-        unlock(netSound);
-        gate.classList.add("gone");
-
-        setTimeout(() => {
-            smoog.classList.add("visible");
-            smoogSound.play().catch(() => { });
-        }, SMOOG_DELAY);
-
-        setTimeout(() => {
-            net.classList.add("visible");
-            netSound.play().catch(() => { });
-        }, NET_DELAY);
-
-        setTimeout(() => finishIntro(true), DOCK_DELAY);
-    });
-}
+let isAdmin = false;
+let postList = []; // newest first, no full bodies
+let quoteList = [];
 
 // =====================================================================
 //  HELPERS
 // =====================================================================
 
-// Build an element: el("a", { href: "#/" }, "text", otherElement)
-// Text always goes in as plain text, so nothing typed can break the page.
+// Build an element: el("a", { href: "#/" }, "text", otherElement, [moreStuff])
+// Text always goes in as plain text, so nothing anyone types can break the page.
 function el(tag, attrs = {}, ...children) {
     const node = document.createElement(tag);
     for (const [key, value] of Object.entries(attrs)) {
@@ -85,21 +30,43 @@ function el(tag, attrs = {}, ...children) {
         else if (value === true) node.setAttribute(key, "");
         else if (value !== false && value != null) node.setAttribute(key, value);
     }
-    for (const child of children.flat()) {
-        if (child == null || child === false) continue;
+    return appendAll(node, children);
+}
+
+// Skips null/false/"" so you can write: isAdmin && el(...)
+function appendAll(node, children) {
+    for (const child of children.flat(Infinity)) {
+        if (child == null || child === false || child === "") continue;
         node.append(child instanceof Node ? child : String(child));
     }
     return node;
 }
 
-function render(...nodes) {
-    content.replaceChildren(...nodes.filter((n) => n != null && n !== false));
+// Replace everything inside a node
+function fill(node, ...children) {
+    node.replaceChildren();
+    return appendAll(node, children);
+}
+
+const render = (...nodes) => fill(content, ...nodes);
+const enc = encodeURIComponent;
+const postLink = (p) => "#/post/" + enc(p.id);
+
+// A box with a yellow title strip, like the MSN panels
+function panel(title, ...children) {
+    return el("section", { class: "panel" },
+        el("div", { class: "panel-head" }, title),
+        el("div", { class: "panel-body" }, ...children));
 }
 
 function fmtDate(iso) {
-    return new Date(iso).toLocaleDateString("en-US", {
-        year: "numeric", month: "long", day: "numeric",
-    });
+    return new Date(iso).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+}
+
+function fmtStamp(iso) {
+    return new Date(iso).toLocaleString("en-US", {
+        month: "numeric", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit",
+    }).replace(",", "");
 }
 
 // Talk to the server. Throws with the server's error message if it fails.
@@ -115,8 +82,23 @@ function sendJSON(method, body) {
     return { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) };
 }
 
+// Wrap a click/submit handler so any error pops up instead of failing silently
+const guard = (fn) => async (...args) => {
+    try { await fn(...args); } catch (err) { alert(err.message); }
+};
+
+async function refreshPosts() {
+    postList = await api("/api/posts");
+    renderChrome();
+}
+
+async function refreshQuotes() {
+    quoteList = await api("/api/quotes");
+    renderQotd();
+}
+
 // =====================================================================
-//  POST BODY — plain text, blank line = new paragraph,
+//  POST TEXT — plain text, blank line = new paragraph,
 //  a line like [photo:abc.jpg] or [video:abc.mp4] becomes that media
 // =====================================================================
 const MEDIA_LINE = /^\s*\[(photo|video):([\w.-]+)\]\s*$/;
@@ -141,12 +123,9 @@ function renderBody(text) {
         if (media) {
             flush();
             const src = "/media/" + media[2];
-            if (media[1] === "photo") {
-                out.append(el("a", { href: src, target: "_blank" },
-                    el("img", { src, loading: "lazy", alt: "" })));
-            } else {
-                out.append(el("video", { src, controls: true, playsinline: true, preload: "metadata" }));
-            }
+            out.append(media[1] === "photo"
+                ? el("a", { href: src, target: "_blank" }, el("img", { src, loading: "lazy", alt: "" }))
+                : el("video", { src, controls: true, playsinline: true, preload: "metadata" }));
         } else if (line.trim() === "") {
             flush();
         } else {
@@ -157,56 +136,329 @@ function renderBody(text) {
     return out;
 }
 
+function excerptOf(text, max = 200) {
+    const plain = text.split("\n").filter((l) => !MEDIA_LINE.test(l)).join(" ").replace(/\s+/g, " ").trim();
+    return plain.length > max ? plain.slice(0, max).replace(/\s+\S*$/, "") + "…" : plain;
+}
+
+// =====================================================================
+//  DATE + QUOTE OF THE DAY
+// =====================================================================
+
+// Days since 1970 in *your* timezone, so the quote flips at local midnight
+function dayNumber(d = new Date()) {
+    return Math.floor(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 86400000);
+}
+
+// Same seed = same "random" order every time, for everyone
+function shuffledOrder(n, seed) {
+    let s = seed >>> 0;
+    const rand = () => {
+        s = (s + 0x6d2b79f5) >>> 0;
+        let t = s;
+        t = Math.imul(t ^ (t >>> 15), t | 1);
+        t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+    const order = [...Array(n).keys()];
+    for (let i = n - 1; i > 0; i--) {
+        const j = Math.floor(rand() * (i + 1));
+        [order[i], order[j]] = [order[j], order[i]];
+    }
+    return order;
+}
+
+// Goes through every quote in a random order, one per day, before
+// reshuffling. Everybody sees the same quote on the same day.
+function quoteOfTheDay(quotes) {
+    if (!quotes.length) return null;
+    const day = dayNumber();
+    const n = quotes.length;
+    return quotes[shuffledOrder(n, Math.floor(day / n))[day % n]];
+}
+
+let shownDay = dayNumber();
+
+function renderDate() {
+    const d = new Date();
+    fill(dateBox,
+        el("div", { class: "weekday" }, d.toLocaleDateString("en-US", { weekday: "long" }).toUpperCase()),
+        el("div", {},
+            el("span", { class: "month" }, d.toLocaleDateString("en-US", { month: "long" }).toUpperCase()),
+            " ",
+            el("span", { class: "day" }, String(d.getDate()))));
+    document.getElementById("year").textContent = d.getFullYear();
+}
+
+function renderQotd() {
+    const q = quoteOfTheDay(quoteList);
+    fill(qotdBox,
+        isAdmin && el("a", { href: "#/quotes", class: "qedit" }, "edit"),
+        q ? [el("span", {}, `“${q.text}”`), q.by && el("span", { class: "by" }, ` — ${q.by}`)]
+            : el("span", { class: "muted" }, "No quote today."));
+}
+
+// If the page is left open past midnight, roll the date and quote over
+setInterval(() => {
+    if (dayNumber() !== shownDay) {
+        shownDay = dayNumber();
+        renderDate();
+        renderQotd();
+    }
+}, 60000);
+
+// =====================================================================
+//  CHROME — the parts around the page: promo, bars, left column
+// =====================================================================
+function renderChrome() {
+    const latest = postList[0];
+    fill(promo, latest
+        ? ["Check out the latest post:", el("a", { href: postLink(latest) }, latest.title)]
+        : "Welcome to my website :D");
+
+    renderQotd();
+
+    fill(subbar, isAdmin
+        ? [el("b", {}, "WEBMASTER: "),
+            el("a", { href: "#/new" }, "New post"),
+            el("a", { href: "#/quotes" }, "Quotes"),
+            el("a", { href: "#/edit-about" }, "Edit About")]
+        : "Welcome to my website :D");
+
+    fill(signin, isAdmin
+        ? el("a", { href: "#/", onclick: logout }, "sign out")
+        : el("a", { href: "#/login" }, "sign in"));
+
+    fill(leftnav, panel("Posts",
+        postList.length
+            ? el("ul", { class: "navlist" }, postList.slice(0, 12).map((p) =>
+                el("li", {}, el("a", { href: postLink(p) }, p.title))))
+            : el("p", { class: "muted" }, "Nothing yet."),
+        postList.length > 12 && el("p", {}, el("a", { href: "#/posts" }, "More..."))));
+}
+
 // =====================================================================
 //  PAGES
 // =====================================================================
-let isAdmin = false;
-
 async function showHome() {
-    const posts = await api("/api/posts");
+    const [latest, ...rest] = postList;
     render(
-        el("p", { class: "tagline" }, "Welcome to my website :D"),
-        isAdmin && el("div", { class: "admin-bar" },
-            el("a", { class: "btn", href: "#/new" }, "[ NEW POST ]"),
-            el("button", { class: "btn", onclick: logout }, "[ LOG OUT ]"),
-        ),
-        posts.length === 0
-            ? el("p", { class: "muted" }, "No posts yet.")
-            : el("ul", { class: "post-list" }, posts.map((p) =>
-                el("li", {},
-                    el("a", { href: "#/post/" + encodeURIComponent(p.id) }, p.title),
-                    el("span", { class: "date" }, fmtDate(p.created)),
-                ))),
+        panel("Today on SMOOGNET", latest
+            ? el("div", { class: "featured" },
+                latest.thumb && el("a", { href: postLink(latest) },
+                    el("img", { class: "thumb", src: "/media/" + latest.thumb, alt: "" })),
+                el("h2", {}, el("a", { href: postLink(latest) }, latest.title)),
+                el("div", { class: "date" }, fmtDate(latest.created)),
+                latest.excerpt && el("p", {}, latest.excerpt),
+                el("p", {}, el("a", { href: postLink(latest) }, "Read more »")))
+            : el("p", {}, "Nothing posted yet. Check back soon!")),
+        rest.length > 0 && panel("More posts",
+            el("ul", { class: "navlist" }, rest.slice(0, 8).map((p) =>
+                el("li", {}, el("a", { href: postLink(p) }, p.title),
+                    el("span", { class: "muted" }, " — " + fmtDate(p.created))))),
+            rest.length > 8 && el("p", {}, el("a", { href: "#/posts" }, "All posts »"))),
     );
+
+    const about = await api("/api/about").catch(() => null);
+    fill(rightcol, panel("Message Center",
+        el("p", {}, "Welcome to my website :D"),
+        el("p", {}, "Click Smooga up top. He has something to say."),
+        about && about.body.trim() && el("p", {},
+            el("b", {}, "About me: "), excerptOf(about.body, 160), " ",
+            el("a", { href: "#/about" }, "More..."))));
+}
+
+function showPosts() {
+    document.title = "Posts — SMOOGNET";
+    const months = new Map(); // "OCTOBER 2026" -> [posts]
+    for (const p of postList) {
+        const m = new Date(p.created).toLocaleDateString("en-US", { month: "long", year: "numeric" }).toUpperCase();
+        if (!months.has(m)) months.set(m, []);
+        months.get(m).push(p);
+    }
+    render(panel("All posts",
+        postList.length === 0 && el("p", {}, "Nothing posted yet."),
+        [...months].map(([month, posts]) => [
+            el("h3", {}, month),
+            el("ul", { class: "navlist" }, posts.map((p) =>
+                el("li", {}, el("a", { href: postLink(p) }, p.title),
+                    el("span", { class: "muted" }, " — " + fmtDate(p.created))))),
+        ])));
 }
 
 async function showPost(id) {
-    const post = await api("/api/posts/" + encodeURIComponent(id));
+    const post = await api("/api/posts/" + enc(id));
     const edited = fmtDate(post.updated) !== fmtDate(post.created);
     document.title = post.title + " — SMOOGNET";
-    render(el("article", { class: "post" },
-        el("h2", {}, post.title),
-        el("span", { class: "date" },
-            fmtDate(post.created), edited && ` · edited ${fmtDate(post.updated)}`),
-        isAdmin && el("div", { class: "admin-bar" },
-            el("a", { class: "btn", href: "#/edit/" + encodeURIComponent(post.id) }, "[ EDIT ]")),
-        renderBody(post.body),
-    ));
+    const commentsBox = el("div");
+    render(
+        panel(fmtDate(post.created),
+            el("h2", {}, post.title),
+            edited && el("div", { class: "date" }, "edited " + fmtDate(post.updated)),
+            isAdmin && el("p", {}, el("a", { class: "btn", href: "#/edit/" + enc(post.id) }, "Edit")),
+            renderBody(post.body)),
+        commentsBox,
+    );
+    await loadComments(post.id, commentsBox);
 }
 
+async function showAbout() {
+    document.title = "About — SMOOGNET";
+    const about = await api("/api/about");
+    render(panel("About",
+        isAdmin && el("p", {}, el("a", { class: "btn", href: "#/edit-about" }, "Edit")),
+        about.body.trim() ? renderBody(about.body) : el("p", { class: "muted" }, "Nothing here yet.")));
+}
+
+function showLogin() {
+    if (isAdmin) { location.hash = "#/"; return; }
+    const pw = el("input", { type: "password", id: "pw", autocomplete: "current-password" });
+    const msg = el("p", { class: "error" });
+    render(panel("Webmaster sign in",
+        el("form", {
+            onsubmit: async (e) => {
+                e.preventDefault();
+                try {
+                    await api("/api/login", sendJSON("POST", { password: pw.value }));
+                    isAdmin = true;
+                    renderChrome();
+                    location.hash = "#/";
+                } catch (err) {
+                    msg.textContent = err.message;
+                }
+            },
+        },
+            el("label", { for: "pw" }, "Password:"),
+            el("div", { class: "inline-form" }, pw, el("button", { class: "go", type: "submit" }, "go")),
+            msg)));
+    pw.focus();
+}
+
+async function logout(e) {
+    e.preventDefault();
+    await api("/api/logout", { method: "POST" }).catch(() => { });
+    isAdmin = false;
+    renderChrome();
+    location.hash = "#/";
+    route();
+}
+
+// =====================================================================
+//  COMMENTS
+// =====================================================================
+async function loadComments(postId, box) {
+    const comments = await api(`/api/posts/${enc(postId)}/comments`);
+    fill(box, panel(`Comments (${comments.length})`,
+        comments.length
+            ? el("ol", { class: "comments" }, comments.map((c) => commentItem(postId, c, box)))
+            : el("p", { class: "muted" }, "No comments yet. Be the first!"),
+        commentForm(postId, box)));
+}
+
+function commentItem(postId, c, box) {
+    const base = `/api/posts/${enc(postId)}/comments/${enc(c.id)}`;
+    const replyArea = el("div");
+    const reload = () => loadComments(postId, box);
+
+    return el("li", { class: "comment" },
+        el("div", { class: "meta" }, el("b", {}, c.name), " ", el("span", { class: "stamp" }, fmtStamp(c.created))),
+        el("div", { class: "text" }, c.text),
+        isAdmin && el("div", { class: "admin-row" },
+            el("button", { class: "btn small", onclick: () => fill(replyArea, replyForm(base, replyArea, reload)) }, "Reply"),
+            el("button", {
+                class: "btn small",
+                onclick: guard(async () => {
+                    if (!confirm(`Delete ${c.name}'s comment?`)) return;
+                    await api(base, { method: "DELETE" });
+                    await reload();
+                }),
+            }, "Delete")),
+        c.replies.length > 0 && el("ul", { class: "replies" }, c.replies.map((r) =>
+            el("li", { class: "reply" },
+                el("div", { class: "meta" },
+                    el("b", {}, "★ " + OWNER), " ", el("span", { class: "tag" }, "webmaster"), " ",
+                    el("span", { class: "stamp" }, fmtStamp(r.created))),
+                el("div", { class: "text" }, r.text),
+                isAdmin && el("div", { class: "admin-row" },
+                    el("button", {
+                        class: "btn small",
+                        onclick: guard(async () => {
+                            if (!confirm("Delete your reply?")) return;
+                            await api(`${base}/replies/${enc(r.id)}`, { method: "DELETE" });
+                            await reload();
+                        }),
+                    }, "Delete"))))),
+        replyArea);
+}
+
+function replyForm(base, area, reload) {
+    const text = el("textarea", { rows: 3, maxlength: 2000 });
+    setTimeout(() => text.focus());
+    return el("form", {
+        onsubmit: guard(async (e) => {
+            e.preventDefault();
+            if (!text.value.trim()) return;
+            await api(base + "/replies", sendJSON("POST", { text: text.value }));
+            await reload();
+        }),
+    },
+        text,
+        el("p", {},
+            el("button", { class: "btn small", type: "submit" }, "Post reply"),
+            el("button", { class: "btn small", type: "button", onclick: () => area.replaceChildren() }, "Cancel")));
+}
+
+function commentForm(postId, box) {
+    let savedName = "";
+    try { savedName = localStorage.getItem("screenName") || ""; } catch { }
+
+    const name = el("input", { type: "text", id: "c-name", maxlength: 32, value: savedName });
+    const text = el("textarea", { id: "c-text", rows: 5, maxlength: 2000 });
+    // the trap: hidden from people, but spam bots fill it in
+    const trap = el("input", { type: "text", name: "website", class: "hp", tabindex: "-1", autocomplete: "off", "aria-hidden": "true" });
+    const button = el("button", { class: "btn", type: "submit" }, "Post comment");
+
+    return el("form", {
+        onsubmit: guard(async (e) => {
+            e.preventDefault();
+            if (!name.value.trim() || !text.value.trim()) { alert("Fill in a screen name and a message."); return; }
+            button.disabled = true;
+            try {
+                await api(`/api/posts/${enc(postId)}/comments`,
+                    sendJSON("POST", { name: name.value, text: text.value, website: trap.value }));
+                try { localStorage.setItem("screenName", name.value.trim()); } catch { }
+                await loadComments(postId, box);
+            } finally {
+                button.disabled = false;
+            }
+        }),
+    },
+        el("h3", {}, "Leave a comment"),
+        el("label", { for: "c-name" }, "Screen name"), name,
+        el("label", { for: "c-text" }, "Message"), text,
+        trap,
+        el("p", {}, button));
+}
+
+// =====================================================================
+//  EDITORS (you only) — posts, the About page, quotes
+// =====================================================================
 const MAX_UPLOAD = 100 * 1024 * 1024; // Cloudflare's free-plan request limit
 
-async function showEditor(id) {
+// kind is "post" or "about"
+async function showEditor(kind, id) {
     if (!isAdmin) { location.hash = "#/login"; return; }
-    const post = id ? await api("/api/posts/" + encodeURIComponent(id)) : null;
+    const isAbout = kind === "about";
+    const post = !isAbout && id ? await api("/api/posts/" + enc(id)) : null;
+    const about = isAbout ? await api("/api/about") : null;
 
     const title = el("input", { type: "text", id: "title", value: post ? post.title : "" });
-    const body = el("textarea", { id: "body" });
-    body.value = post ? post.body : "";
+    const body = el("textarea", { id: "body", class: "editor-body" });
+    body.value = (post || about || { body: "" }).body;
     const status = el("p", { class: "hint" });
     const fileInput = el("input", { type: "file", accept: "image/*,video/*", multiple: true, hidden: true });
-    const addBtn = el("button", { class: "btn", type: "button", onclick: () => fileInput.click() }, "[ + PHOTO / VIDEO ]");
-    const saveBtn = el("button", { class: "btn", type: "button", onclick: save }, post ? "[ SAVE ]" : "[ PUBLISH ]");
+    const addBtn = el("button", { class: "btn", type: "button", onclick: () => fileInput.click() }, "+ Photo / Video");
+    const saveBtn = el("button", { class: "btn", type: "button", onclick: guard(save) }, post || isAbout ? "Save" : "Publish");
 
     fileInput.addEventListener("change", async () => {
         const files = [...fileInput.files];
@@ -234,84 +486,92 @@ async function showEditor(id) {
     });
 
     async function save() {
-        if (!title.value.trim()) { alert("Give it a title first."); return; }
         saveBtn.disabled = true;
         try {
+            if (isAbout) {
+                await api("/api/about", sendJSON("PUT", { body: body.value }));
+                location.hash = "#/about";
+                return;
+            }
+            if (!title.value.trim()) throw new Error("Give it a title first.");
             const data = { title: title.value, body: body.value };
             const saved = post
-                ? await api("/api/posts/" + encodeURIComponent(post.id), sendJSON("PUT", data))
+                ? await api("/api/posts/" + enc(post.id), sendJSON("PUT", data))
                 : await api("/api/posts", sendJSON("POST", data));
-            location.hash = "#/post/" + encodeURIComponent(saved.id);
-        } catch (err) {
-            alert("Couldn't save: " + err.message);
+            await refreshPosts();
+            location.hash = postLink(saved);
+        } finally {
             saveBtn.disabled = false;
         }
     }
 
     async function remove() {
-        if (!confirm("Delete this post for good?")) return;
-        try {
-            await api("/api/posts/" + encodeURIComponent(post.id), { method: "DELETE" });
-            location.hash = "#/";
-        } catch (err) {
-            alert("Couldn't delete: " + err.message);
-        }
+        if (!confirm("Delete this post (and its comments) for good?")) return;
+        await api("/api/posts/" + enc(post.id), { method: "DELETE" });
+        await refreshPosts();
+        location.hash = "#/posts";
     }
 
-    render(
-        el("h2", {}, post ? "Edit post" : "New post"),
-        el("label", { for: "title" }, "Title"),
-        title,
-        el("label", { for: "body" }, "Post"),
-        el("div", {}, addBtn, fileInput),
+    render(panel(isAbout ? "Edit About page" : post ? "Edit post" : "New post",
+        !isAbout && [el("label", { for: "title" }, "Title"), title],
+        el("label", { for: "body" }, isAbout ? "About" : "Post"),
+        el("p", {}, addBtn, fileInput),
         body,
         status,
         el("p", { class: "hint" },
             "Blank line = new paragraph. Photos/videos show up wherever their [photo:…] or [video:…] line sits — move or delete those lines like any other text."),
-        el("div", {},
+        el("p", {},
             saveBtn,
-            el("a", { class: "btn", href: post ? "#/post/" + encodeURIComponent(post.id) : "#/" }, "[ CANCEL ]"),
-            post && el("button", { class: "btn danger", type: "button", onclick: remove }, "[ DELETE ]"),
-        ),
-    );
-    if (!post) title.focus();
+            el("a", { class: "btn", href: isAbout ? "#/about" : post ? postLink(post) : "#/" }, "Cancel"),
+            post && el("button", { class: "btn", type: "button", onclick: guard(remove) }, "Delete post"))));
+    if (!post && !isAbout) title.focus();
 }
 
-function showLogin() {
-    if (isAdmin) { location.hash = "#/"; return; }
-    const pw = el("input", { type: "password", id: "pw", autocomplete: "current-password" });
-    const msg = el("p", { class: "error" });
-    render(el("form", {
-        onsubmit: async (e) => {
-            e.preventDefault();
-            try {
-                await api("/api/login", sendJSON("POST", { password: pw.value }));
-                isAdmin = true;
-                location.hash = "#/";
-            } catch (err) {
-                msg.textContent = err.message;
-            }
+function showQuotes() {
+    if (!isAdmin) { location.hash = "#/login"; return; }
+    document.title = "Quotes — SMOOGNET";
+    const today = quoteOfTheDay(quoteList);
+    const text = el("textarea", { id: "q-text", rows: 3, maxlength: 500 });
+    const by = el("input", { type: "text", id: "q-by", maxlength: 100 });
+
+    render(panel("Quotes of the day",
+        el("p", { class: "muted" },
+            "One gets picked each day at random. It works through all of them before any repeats, and everyone sees the same one."),
+        quoteList.length
+            ? el("ol", {}, quoteList.map((q) => el("li", {},
+                `“${q.text}”`, q.by && el("span", { class: "muted" }, ` — ${q.by}`),
+                q === today && el("b", {}, " ← today"), " ",
+                el("button", {
+                    class: "btn small",
+                    onclick: guard(async () => {
+                        if (!confirm("Delete this quote?")) return;
+                        await api("/api/quotes/" + enc(q.id), { method: "DELETE" });
+                        await refreshQuotes();
+                        showQuotes();
+                    }),
+                }, "Delete"))))
+            : el("p", {}, "No quotes yet."),
+        el("form", {
+            onsubmit: guard(async (e) => {
+                e.preventDefault();
+                if (!text.value.trim()) return;
+                await api("/api/quotes", sendJSON("POST", { text: text.value, by: by.value }));
+                await refreshQuotes();
+                showQuotes();
+            }),
         },
-    },
-        el("label", { for: "pw" }, "Password"),
-        pw,
-        el("p", {}, el("button", { class: "btn", type: "submit" }, "[ LOG IN ]")),
-        msg,
-    ));
-    pw.focus();
-}
-
-async function logout() {
-    await api("/api/logout", { method: "POST" }).catch(() => { });
-    isAdmin = false;
-    route();
+            el("h3", {}, "Add a quote"),
+            el("label", { for: "q-text" }, "Quote"), text,
+            el("label", { for: "q-by" }, "Who said it (optional)"), by,
+            el("p", {}, el("button", { class: "btn", type: "submit" }, "Add quote")))));
+    text.focus();
 }
 
 // =====================================================================
 //  UPLOAD HELPERS
 // =====================================================================
 
-// Phone photos are huge. Shrink to 2000px wide-ish JPEG before uploading.
+// Phone photos are huge. Shrink to 2000px before uploading.
 // (This also strips the GPS location phones bake into photos.)
 async function shrinkImage(file) {
     if (file.type === "image/gif") return file; // keep animations
@@ -360,65 +620,32 @@ function insertAtCursor(textarea, text) {
 }
 
 // =====================================================================
-//  ROUTER — the part after # in the URL decides what page to show
-//    #/            home (post list)
-//    #/post/ID     one post
-//    #/new         new post (you only)
-//    #/edit/ID     edit post (you only)
-//    #/login       log in
-// =====================================================================
-async function route() {
-    const parts = location.hash.replace(/^#\/?/, "").split("/").filter(Boolean);
-    const [page, id] = [parts[0], parts[1] && decodeURIComponent(parts[1])];
-    document.title = "SMOOGNET";
-    window.scrollTo(0, 0);
-    try {
-        if (!page) await showHome();
-        else if (page === "post" && id) await showPost(id);
-        else if (page === "new") await showEditor(null);
-        else if (page === "edit" && id) await showEditor(id);
-        else if (page === "login") showLogin();
-        else render(el("p", {}, "Nothing here. ", el("a", { href: "#/" }, "Go home")));
-    } catch (err) {
-        render(el("p", { class: "error" }, err.message), el("a", { href: "#/" }, "Go home"));
-    }
-}
-
-window.addEventListener("hashchange", route);
-
-api("/api/me")
-    .then((me) => { isAdmin = me.admin; })
-    .catch(() => { })
-    .finally(route);
-
-// =====================================================================
-//  BUDDY — click him and he says hi. The jaw drops further
+//  SMOOGA — click him and he says hi. The jaw drops further
 //  the louder the audio is at that moment.
 // =====================================================================
 const buddy = document.getElementById("buddy");
 const jaw = document.getElementById("buddy-jaw");
 const hello = new Audio("audio/hello.wav");
 const JAW_MAX = 4; // how far the jaw can drop, in his own pixels (he's 107px tall)
-let analyser, samples;
+let analyser, samples, audioCtx;
+let level = 0;
 
 buddy.addEventListener("click", () => {
     // Web Audio lets us "listen" to the sound while it plays
     if (!analyser) {
-        const ctx = new AudioContext();
-        analyser = ctx.createAnalyser();
+        audioCtx = new AudioContext();
+        analyser = audioCtx.createAnalyser();
         analyser.fftSize = 512;
-        ctx.createMediaElementSource(hello).connect(analyser);
-        analyser.connect(ctx.destination);
+        audioCtx.createMediaElementSource(hello).connect(analyser);
+        analyser.connect(audioCtx.destination);
         samples = new Uint8Array(analyser.fftSize);
-        buddy.audioCtx = ctx;
     }
-    buddy.audioCtx.resume();
+    audioCtx.resume();
     hello.currentTime = 0;
     hello.play().catch(() => { });
     requestAnimationFrame(moveJaw);
 });
 
-let level = 0;
 function moveJaw() {
     analyser.getByteTimeDomainData(samples);
     let loudest = 0;
@@ -429,3 +656,57 @@ function moveJaw() {
     if (hello.paused) level = 0;
     else requestAnimationFrame(moveJaw);
 }
+
+// =====================================================================
+//  ROUTER — the part after # in the URL decides what page to show
+//    #/              home          #/post/ID      one post
+//    #/posts         all posts     #/about        about page
+//    #/new           new post      #/edit/ID      edit post
+//    #/edit-about    edit about    #/quotes       manage quotes
+//    #/login         sign in
+// =====================================================================
+const TAB_FOR = { home: "home", posts: "posts", post: "posts", new: "posts", edit: "posts", about: "about", "edit-about": "about" };
+
+async function route() {
+    const parts = location.hash.replace(/^#\/?/, "").split("/").filter(Boolean);
+    const page = parts[0] || "home";
+    const id = parts[1] && decodeURIComponent(parts[1]);
+
+    document.querySelectorAll("#tabs a[data-tab]").forEach((a) =>
+        a.classList.toggle("active", a.dataset.tab === TAB_FOR[page]));
+    document.title = "SMOOGNET";
+    layout.classList.toggle("with-right", page === "home");
+    rightcol.replaceChildren();
+    window.scrollTo(0, 0);
+
+    try {
+        if (page === "home") await showHome();
+        else if (page === "posts") showPosts();
+        else if (page === "post" && id) await showPost(id);
+        else if (page === "about") await showAbout();
+        else if (page === "new") await showEditor("post");
+        else if (page === "edit" && id) await showEditor("post", id);
+        else if (page === "edit-about") await showEditor("about");
+        else if (page === "quotes") showQuotes();
+        else if (page === "login") showLogin();
+        else render(panel("Not found", el("p", {}, "Nothing here. ", el("a", { href: "#/" }, "Go home"))));
+    } catch (err) {
+        render(panel("Error", el("p", { class: "error" }, err.message), el("a", { href: "#/" }, "Go home")));
+    }
+}
+
+window.addEventListener("hashchange", route);
+
+// ---------- start up ----------
+renderDate();
+Promise.all([
+    api("/api/me").catch(() => ({ admin: false })),
+    api("/api/posts").catch(() => []),
+    api("/api/quotes").catch(() => []),
+]).then(([me, posts, quotes]) => {
+    isAdmin = me.admin;
+    postList = posts;
+    quoteList = quotes;
+    renderChrome();
+    route();
+});

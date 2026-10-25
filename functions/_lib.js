@@ -1,10 +1,29 @@
-// Shared helpers for the server code. Not a route (it exports no onRequest).
+// Shared helpers for the server code.
+
+export const OWNER_NAME = "smoog"; // name shown on your replies to comments
+
+export class HttpError extends Error {
+    constructor(status, message) {
+        super(message);
+        this.status = status;
+    }
+}
 
 export function json(data, status = 200, headers = {}) {
     return new Response(JSON.stringify(data), {
         status,
         headers: { "content-type": "application/json", "cache-control": "no-store", ...headers },
     });
+}
+
+export function newId() {
+    return Date.now().toString(36) + "-" + crypto.randomUUID().slice(0, 6);
+}
+
+// Trim, cap the length, strip invisible junk characters.
+export function cleanText(value, max) {
+    if (typeof value !== "string") return "";
+    return value.replace(/\r\n?/g, "\n").replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, "").trim().slice(0, max);
 }
 
 // ---------- login ----------
@@ -41,28 +60,57 @@ export async function isAdmin(request, env) {
     return !!match && sameString(match[1], await adminToken(env));
 }
 
-// ---------- posts (all kept in one posts.json file in R2) ----------
-const POSTS_KEY = "posts.json";
-
-export async function readPosts(env) {
-    const obj = await env.BUCKET.get(POSTS_KEY);
-    return obj ? await obj.json() : [];
+export async function requireAdmin(request, env) {
+    if (!(await isAdmin(request, env))) throw new HttpError(401, "Not allowed");
 }
 
-export async function writePosts(env, posts) {
-    await env.BUCKET.put(POSTS_KEY, JSON.stringify(posts), {
-        httpMetadata: { contentType: "application/json" },
-    });
+// ---------- JSON files in R2 ----------
+export async function readJSON(env, key, fallback) {
+    const obj = await env.BUCKET.get(key);
+    return obj ? await obj.json() : fallback;
+}
+
+export async function writeJSON(env, key, data) {
+    await env.BUCKET.put(key, JSON.stringify(data), { httpMetadata: { contentType: "application/json" } });
+}
+
+// Read a file, change it, save it — and if someone else saved it in
+// between (two people commenting at once), start over instead of
+// wiping out their change. `change` edits the data in place.
+export async function updateJSON(env, key, fallback, change) {
+    for (let attempt = 0; attempt < 8; attempt++) {
+        if (attempt > 0) await new Promise((r) => setTimeout(r, Math.random() * 100 * attempt)); // back off a moment
+        const obj = await env.BUCKET.get(key);
+        const data = obj ? await obj.json() : structuredClone(fallback);
+        const result = await change(data);
+        const saved = await env.BUCKET.put(key, JSON.stringify(data), {
+            httpMetadata: { contentType: "application/json" },
+            ...(obj ? { onlyIf: { etagMatches: obj.etag } } : {}),
+        });
+        if (saved) return result;
+    }
+    throw new HttpError(503, "Busy, try again");
+}
+
+// ---------- posts (all kept in one posts.json file) ----------
+export const POSTS_KEY = "posts.json";
+
+export function readPosts(env) {
+    return readJSON(env, POSTS_KEY, []);
 }
 
 export function cleanInput(data) {
-    const title = typeof data?.title === "string" ? data.title.trim().slice(0, 200) : "";
+    const title = cleanText(data?.title, 200);
     const body = typeof data?.body === "string" ? data.body.slice(0, 200000) : "";
-    if (!title) return { error: "Title is required" };
+    if (!title) throw new HttpError(400, "Title is required");
     return { title, body };
 }
 
 export function makeId(title) {
     const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 50);
     return (slug || "post") + "-" + Date.now().toString(36);
+}
+
+export function commentsKey(postId) {
+    return `comments/${postId}.json`;
 }

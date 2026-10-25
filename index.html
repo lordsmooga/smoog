@@ -9,15 +9,46 @@
 </head>
 
 <body>
-    <header>
-        <h1><a href="#/" id="home-link"><span id="smoog">SMOOG</span><span id="net">NET</span></a></h1>
-    </header>
-    <button id="gate">[ CLICK TO ENTER ]</button>
-    <main id="content"></main>
-    <button id="buddy" title="Click me!" aria-label="Say hello">
-        <img id="buddy-jaw" src="img/buddy-jaw.png" alt="">
-        <img id="buddy-face" src="img/buddy-face.png" alt="">
-    </button>
+    <div id="page">
+        <!-- top: logo, latest-post promo, Smooga + today's date -->
+        <header id="masthead">
+            <a href="#/" id="logo">smoognet</a>
+            <div id="promo"></div>
+            <div id="today">
+                <button id="buddy" title="Click me!" aria-label="Smooga says hello">
+                    <img id="buddy-jaw" src="img/buddy-jaw.png" alt="">
+                    <img id="buddy-face" src="img/buddy-face.png" alt="">
+                </button>
+                <div id="date"></div>
+            </div>
+        </header>
+
+        <!-- quote of the day band -->
+        <div id="qotd-bar">
+            <span class="qotd-label">&raquo; QUOTE <small>of the</small> DAY</span>
+            <div id="qotd"></div>
+        </div>
+
+        <!-- tabs -->
+        <nav id="tabs">
+            <a href="#/" data-tab="home">Home</a>
+            <a href="#/posts" data-tab="posts">Posts</a>
+            <a href="#/about" data-tab="about">About</a>
+            <span id="signin"></span>
+        </nav>
+        <div id="subbar"></div>
+
+        <!-- columns -->
+        <div id="layout">
+            <aside id="leftnav"></aside>
+            <main id="content"></main>
+            <aside id="rightcol"></aside>
+        </div>
+
+        <footer id="footer">
+            Best viewed in Internet Explorer 5.0 at 800&times;600 &middot; &copy; <span id="year"></span> SMOOGNET
+        </footer>
+    </div>
     <script src="script.js"></script>
 </body>
 

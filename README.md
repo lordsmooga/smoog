@@ -2,11 +2,29 @@
 SMOOGNET
 
 ## How it works
-- `index.html`, `styles.css`, `script.js` — the whole front end. The part of the URL after `#` decides which page shows (`#/`, `#/post/ID`, `#/new`, `#/edit/ID`, `#/login`).
+- `index.html`, `styles.css`, `script.js` — the whole front end (the 2000-era MSN-style layout). The part of the URL after `#` decides which page shows.
 - `worker.js` — the Cloudflare Worker. Sends `/api/...` and `/media/...` to the server code in `functions/`, serves everything else as plain files.
 - `wrangler.jsonc` — Worker settings Cloudflare reads on every deploy (name, R2 bucket hookup). `.assetsignore` keeps server files from being served publicly.
-- Posts live in one `posts.json` file and uploads live in `media/`, both inside an R2 bucket (Cloudflare's file storage).
-- Log in at **smoog.net/#/login**. Logged in, you get NEW POST / EDIT / LOG OUT buttons. Everyone else can only read.
+- Everything you write lives in the R2 bucket: `posts.json`, `quotes.json`, `about.json`, `comments/<post id>.json`, and uploads in `media/`.
+- `audio/smoog.mp3` and `audio/net.mp3` belonged to the old intro and aren't used anymore. Safe to delete.
+
+## Pages
+| URL | What |
+|---|---|
+| `#/` | Home |
+| `#/posts` | All posts |
+| `#/post/ID` | One post + comments |
+| `#/about` | About page |
+| `#/login` | Sign in (also the "sign in" link on the tab bar) |
+| `#/new`, `#/edit/ID`, `#/edit-about`, `#/quotes` | Webmaster only (links show in the bar under the tabs when signed in) |
+
+## Quote of the day
+Add/delete quotes at `#/quotes`. Each day one is picked at random; it goes through all of them before repeating, and everyone sees the same one.
+
+## Comments
+Anyone can comment with a screen name. Signed in, you get Reply and Delete on every comment.
+Your replies show as **smoog** with a WEBMASTER tag (change `OWNER_NAME` in `functions/_lib.js` and `OWNER` in `script.js` together). Visitors can't use that screen name.
+Spam protection is a hidden "honeypot" box that bots fill in and people never see. If real spam gets through, Cloudflare Turnstile is the next step up.
 
 ## One-time Cloudflare setup
 1. **Make the bucket:** Cloudflare dashboard → R2 Object Storage → Create bucket → name it `smoognet`.
@@ -23,4 +41,4 @@ SMOOGNET
 - Videos: 100 MB max per file (Cloudflare free-plan limit).
 
 ## Run it on your PC (optional)
-`npx wrangler dev --var ADMIN_PASSWORD:test` → open http://localhost:8788
+`npx wrangler dev --var ADMIN_PASSWORD:test` → open http://localhost:8787

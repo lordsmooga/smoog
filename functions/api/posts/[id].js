@@ -1,33 +1,33 @@
-import { json, isAdmin, readPosts, writePosts, cleanInput } from "../../_lib.js";
+import { json, requireAdmin, readPosts, updateJSON, cleanInput, commentsKey, HttpError, POSTS_KEY } from "../../_lib.js";
 
 // GET /api/posts/:id — one full post
 export async function onRequestGet({ env, params }) {
     const post = (await readPosts(env)).find((p) => p.id === params.id);
-    return post ? json(post) : json({ error: "Post not found" }, 404);
+    if (!post) throw new HttpError(404, "Post not found");
+    return json(post);
 }
 
 // PUT /api/posts/:id — edit a post (you only)
 export async function onRequestPut({ request, env, params }) {
-    if (!(await isAdmin(request, env))) return json({ error: "Not allowed" }, 401);
+    await requireAdmin(request, env);
     const input = cleanInput(await request.json().catch(() => null));
-    if (input.error) return json({ error: input.error }, 400);
-
-    const posts = await readPosts(env);
-    const post = posts.find((p) => p.id === params.id);
-    if (!post) return json({ error: "Post not found" }, 404);
-    post.title = input.title;
-    post.body = input.body;
-    post.updated = new Date().toISOString();
-    await writePosts(env, posts);
+    const post = await updateJSON(env, POSTS_KEY, [], (posts) => {
+        const post = posts.find((p) => p.id === params.id);
+        if (!post) throw new HttpError(404, "Post not found");
+        Object.assign(post, input, { updated: new Date().toISOString() });
+        return post;
+    });
     return json(post);
 }
 
-// DELETE /api/posts/:id — delete a post (you only)
+// DELETE /api/posts/:id — delete a post and its comments (you only)
 export async function onRequestDelete({ request, env, params }) {
-    if (!(await isAdmin(request, env))) return json({ error: "Not allowed" }, 401);
-    const posts = await readPosts(env);
-    const remaining = posts.filter((p) => p.id !== params.id);
-    if (remaining.length === posts.length) return json({ error: "Post not found" }, 404);
-    await writePosts(env, remaining);
+    await requireAdmin(request, env);
+    await updateJSON(env, POSTS_KEY, [], (posts) => {
+        const i = posts.findIndex((p) => p.id === params.id);
+        if (i === -1) throw new HttpError(404, "Post not found");
+        posts.splice(i, 1);
+    });
+    await env.BUCKET.delete(commentsKey(params.id));
     return json({ ok: true });
 }
