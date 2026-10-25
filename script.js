@@ -16,6 +16,7 @@ const OWNER = "smoog"; // your name on comment replies (matches OWNER_NAME in fu
 let isAdmin = false;
 let postList = []; // newest first, no full bodies
 let quoteList = [];
+let hitCount = null; // visitor odometer
 
 // =====================================================================
 //  HELPERS
@@ -234,7 +235,10 @@ function renderChrome() {
             ? el("ul", { class: "navlist" }, postList.slice(0, 12).map((p) =>
                 el("li", {}, el("a", { href: postLink(p) }, p.title))))
             : el("p", { class: "muted" }, "Nothing yet."),
-        postList.length > 12 && el("p", {}, el("a", { href: "#/posts" }, "More..."))));
+        postList.length > 12 && el("p", {}, el("a", { href: "#/posts" }, "More..."))),
+        hitCount != null && panel("Visitors",
+            el("div", { class: "odo" }, String(hitCount).padStart(6, "0").split("").map((d) => el("span", {}, d))),
+            el("div", { class: "muted center" }, "since 2026")));
 }
 
 // =====================================================================
@@ -265,7 +269,11 @@ async function showHome() {
         el("p", {}, "Click Smooga up top. He has something to say."),
         about && about.body.trim() && el("p", {},
             el("b", {}, "About me: "), excerptOf(about.body, 160), " ",
-            el("a", { href: "#/about" }, "More..."))));
+            el("a", { href: "#/about" }, "More..."))),
+        panel("Feed Smooga",
+            el("div", { class: "can-box" },
+                el("img", { class: "can", src: "img/sardines.png", alt: "Can of sardines", draggable: "false", onpointerdown: grabCan })),
+            el("p", { class: "muted center" }, "Drag the sardines to Smooga (or just tap them).")));
 }
 
 function showPosts() {
@@ -299,7 +307,7 @@ async function showPost(id) {
             renderBody(post.body)),
         commentsBox,
     );
-    await loadComments(post.id, commentsBox);
+    await loadComments(`/api/posts/${enc(post.id)}/comments`, commentsBox);
 }
 
 async function showAbout() {
@@ -344,21 +352,26 @@ async function logout(e) {
 }
 
 // =====================================================================
-//  COMMENTS
+//  COMMENTS + GUESTBOOK — same code, different address:
+//    post comments: /api/posts/<id>/comments     guestbook: /api/guestbook
 // =====================================================================
-async function loadComments(postId, box) {
-    const comments = await api(`/api/posts/${enc(postId)}/comments`);
-    fill(box, panel(`Comments (${comments.length})`,
-        comments.length
-            ? el("ol", { class: "comments" }, comments.map((c) => commentItem(postId, c, box)))
-            : el("p", { class: "muted" }, "No comments yet. Be the first!"),
-        commentForm(postId, box)));
+async function loadComments(apiBase, box, opts = {}) {
+    let comments = await api(apiBase);
+    if (opts.newestFirst) comments = comments.slice().reverse();
+    const reload = () => loadComments(apiBase, box, opts);
+
+    const list = comments.length
+        ? el("ol", { class: "comments" }, comments.map((c) => commentItem(apiBase, c, reload)))
+        : el("p", { class: "muted" }, opts.empty || "No comments yet. Be the first!");
+    const form = commentForm(apiBase, reload, opts.formTitle || "Leave a comment", opts.button || "Post comment");
+
+    fill(box, panel(`${opts.title || "Comments"} (${comments.length})`,
+        opts.formFirst ? [form, list] : [list, form]));
 }
 
-function commentItem(postId, c, box) {
-    const base = `/api/posts/${enc(postId)}/comments/${enc(c.id)}`;
+function commentItem(apiBase, c, reload) {
+    const base = `${apiBase}/${enc(c.id)}`;
     const replyArea = el("div");
-    const reload = () => loadComments(postId, box);
 
     return el("li", { class: "comment" },
         el("div", { class: "meta" }, el("b", {}, c.name), " ", el("span", { class: "stamp" }, fmtStamp(c.created))),
@@ -368,7 +381,7 @@ function commentItem(postId, c, box) {
             el("button", {
                 class: "btn small",
                 onclick: guard(async () => {
-                    if (!confirm(`Delete ${c.name}'s comment?`)) return;
+                    if (!confirm(`Delete ${c.name}'s message?`)) return;
                     await api(base, { method: "DELETE" });
                     await reload();
                 }),
@@ -408,7 +421,7 @@ function replyForm(base, area, reload) {
             el("button", { class: "btn small", type: "button", onclick: () => area.replaceChildren() }, "Cancel")));
 }
 
-function commentForm(postId, box) {
+function commentForm(apiBase, reload, heading, buttonText) {
     let savedName = "";
     try { savedName = localStorage.getItem("screenName") || ""; } catch { }
 
@@ -416,7 +429,7 @@ function commentForm(postId, box) {
     const text = el("textarea", { id: "c-text", rows: 5, maxlength: 2000 });
     // the trap: hidden from people, but spam bots fill it in
     const trap = el("input", { type: "text", name: "website", class: "hp", tabindex: "-1", autocomplete: "off", "aria-hidden": "true" });
-    const button = el("button", { class: "btn", type: "submit" }, "Post comment");
+    const button = el("button", { class: "btn", type: "submit" }, buttonText);
 
     return el("form", {
         onsubmit: guard(async (e) => {
@@ -424,20 +437,30 @@ function commentForm(postId, box) {
             if (!name.value.trim() || !text.value.trim()) { alert("Fill in a screen name and a message."); return; }
             button.disabled = true;
             try {
-                await api(`/api/posts/${enc(postId)}/comments`,
-                    sendJSON("POST", { name: name.value, text: text.value, website: trap.value }));
+                await api(apiBase, sendJSON("POST", { name: name.value, text: text.value, website: trap.value }));
                 try { localStorage.setItem("screenName", name.value.trim()); } catch { }
-                await loadComments(postId, box);
+                await reload();
             } finally {
                 button.disabled = false;
             }
         }),
     },
-        el("h3", {}, "Leave a comment"),
+        el("h3", {}, heading),
         el("label", { for: "c-name" }, "Screen name"), name,
         el("label", { for: "c-text" }, "Message"), text,
         trap,
         el("p", {}, button));
+}
+
+async function showGuestbook() {
+    document.title = "Guestbook — SMOOGNET";
+    const box = el("div");
+    render(box);
+    await loadComments("/api/guestbook", box, {
+        title: "Guestbook", newestFirst: true, formFirst: true,
+        formTitle: "Sign my guestbook!", button: "Sign it",
+        empty: "Nobody has signed yet. Be the first!",
+    });
 }
 
 // =====================================================================
@@ -620,52 +643,154 @@ function insertAtCursor(textarea, text) {
 }
 
 // =====================================================================
-//  SMOOGA — click him and he says hi. The jaw drops further
-//  the louder the audio is at that moment.
+//  SMOOGA — click him and he says hi. Drag the sardines onto him and
+//  he eats them. His jaw drops further the louder the sound is.
 // =====================================================================
 const buddy = document.getElementById("buddy");
 const jaw = document.getElementById("buddy-jaw");
-const hello = new Audio("audio/hello.wav");
-const JAW_MAX = 4; // how far the jaw can drop, in his own pixels (he's 107px tall)
-let analyser, samples, audioCtx;
-let level = 0;
+const food = document.getElementById("buddy-food");
 
-buddy.addEventListener("click", () => {
-    // Web Audio lets us "listen" to the sound while it plays
+const HELLO = "audio/hello.wav";
+const EAT_SOUND = "audio/eat.wav";
+const FED_LINES = ["audio/fed1.wav", "audio/fed2.wav", "audio/fed3.wav", "audio/fed4.wav"]; // picks one at random
+const JAW_MAX = 4; // how far the jaw drops while talking, in his own pixels (he's 107px tall)
+const JAW_EAT = 4; // how wide he opens for the sardine
+
+let analyser, samples, audioCtx;
+let speaking = null; // the sound playing right now
+let level = 0;
+let busy = false; // true while he's eating, so he can't be fed twice at once
+const sounds = {};
+
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+
+function setJaw(px) {
+    jaw.style.transform = `translateY(${(px / 107) * 100}%)`; // whole pixels only, stays chunky
+}
+
+// Play a sound through the "listener" so the jaw can follow it.
+// Resolves when the sound finishes (or right away if the file is missing).
+function speak(src) {
     if (!analyser) {
         audioCtx = new AudioContext();
         analyser = audioCtx.createAnalyser();
         analyser.fftSize = 512;
-        audioCtx.createMediaElementSource(hello).connect(analyser);
         analyser.connect(audioCtx.destination);
         samples = new Uint8Array(analyser.fftSize);
     }
     audioCtx.resume();
-    hello.currentTime = 0;
-    hello.play().catch(() => { });
-    requestAnimationFrame(moveJaw);
-});
+    if (!sounds[src]) {
+        sounds[src] = new Audio(src);
+        audioCtx.createMediaElementSource(sounds[src]).connect(analyser);
+    }
+    if (speaking) speaking.pause();
+    const sound = sounds[src];
+    speaking = sound;
+    sound.currentTime = 0;
+    return new Promise((resolve) => {
+        const done = () => { sound.removeEventListener("ended", done); resolve(); };
+        sound.addEventListener("ended", done);
+        sound.play().then(() => requestAnimationFrame(moveJaw)).catch(done);
+    });
+}
 
 function moveJaw() {
+    if (!speaking || speaking.paused) { level = 0; setJaw(0); return; }
     analyser.getByteTimeDomainData(samples);
     let loudest = 0;
     for (const s of samples) loudest = Math.max(loudest, Math.abs(s - 128)); // 128 = silence
     level = Math.max(loudest, level * 0.8); // jaw snaps open, eases shut
-    const drop = hello.paused ? 0 : Math.round(Math.min(1, level / 40) * JAW_MAX);
-    jaw.style.transform = `translateY(${(drop / 107) * 100}%)`; // whole pixels only, stays chunky
-    if (hello.paused) level = 0;
-    else requestAnimationFrame(moveJaw);
+    setJaw(Math.round(Math.min(1, level / 40) * JAW_MAX));
+    requestAnimationFrame(moveJaw);
+}
+
+buddy.addEventListener("click", () => {
+    if (!busy) speak(HELLO);
+});
+
+async function feed() {
+    if (busy) return;
+    busy = true;
+    if (speaking) speaking.pause();
+    try {
+        setJaw(JAW_EAT); // open wide
+        await wait(150);
+        food.classList.remove("slurp");
+        void food.offsetWidth; // restart the animation
+        food.classList.add("slurp"); // sardine slides up behind his face
+        await wait(750);
+        food.classList.remove("slurp");
+        setJaw(0);
+        await speak(EAT_SOUND); // chewing = jaw following the eating sound
+        await wait(250);
+        await speak(FED_LINES[Math.floor(Math.random() * FED_LINES.length)]);
+    } finally {
+        busy = false;
+    }
+}
+
+// Drag the can. A copy follows your mouse/finger; touch Smooga with it to feed him.
+// A quick tap (no drag) feeds him too, which helps on phones where he's far away.
+function grabCan(e) {
+    e.preventDefault();
+    const can = e.currentTarget;
+    const box = can.getBoundingClientRect();
+    const offX = e.clientX - box.left;
+    const offY = e.clientY - box.top;
+    const startX = e.clientX;
+    const startY = e.clientY;
+    let moved = false;
+    let fed = false;
+
+    const ghost = can.cloneNode();
+    ghost.classList.add("dragging");
+    ghost.style.left = box.left + "px";
+    ghost.style.top = box.top + "px";
+    document.body.append(ghost);
+    can.classList.add("waiting");
+
+    function onMove(ev) {
+        if (Math.hypot(ev.clientX - startX, ev.clientY - startY) > 5) moved = true;
+        ghost.style.left = ev.clientX - offX + "px";
+        ghost.style.top = ev.clientY - offY + "px";
+        const g = ghost.getBoundingClientRect();
+        const b = buddy.getBoundingClientRect();
+        const touching = g.right > b.left && g.left < b.right && g.bottom > b.top && g.top < b.bottom;
+        if (touching && !fed && !busy) {
+            fed = true;
+            feed();
+            finish();
+        }
+    }
+
+    function finish() {
+        window.removeEventListener("pointermove", onMove);
+        window.removeEventListener("pointerup", onUp);
+        window.removeEventListener("pointercancel", finish);
+        ghost.remove();
+        can.classList.remove("waiting");
+    }
+
+    function onUp() {
+        if (!moved && !fed) feed();
+        finish();
+    }
+
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", finish);
 }
 
 // =====================================================================
 //  ROUTER — the part after # in the URL decides what page to show
 //    #/              home          #/post/ID      one post
 //    #/posts         all posts     #/about        about page
+//    #/guestbook     guestbook
 //    #/new           new post      #/edit/ID      edit post
 //    #/edit-about    edit about    #/quotes       manage quotes
 //    #/login         sign in
 // =====================================================================
-const TAB_FOR = { home: "home", posts: "posts", post: "posts", new: "posts", edit: "posts", about: "about", "edit-about": "about" };
+const TAB_FOR = { home: "home", posts: "posts", post: "posts", new: "posts", edit: "posts", guestbook: "guestbook", about: "about", "edit-about": "about" };
 
 async function route() {
     const parts = location.hash.replace(/^#\/?/, "").split("/").filter(Boolean);
@@ -683,6 +808,7 @@ async function route() {
         if (page === "home") await showHome();
         else if (page === "posts") showPosts();
         else if (page === "post" && id) await showPost(id);
+        else if (page === "guestbook") await showGuestbook();
         else if (page === "about") await showAbout();
         else if (page === "new") await showEditor("post");
         else if (page === "edit" && id) await showEditor("post", id);
@@ -698,15 +824,31 @@ async function route() {
 window.addEventListener("hashchange", route);
 
 // ---------- start up ----------
+
+// Adds 1 to the odometer the first time this browser visits, otherwise just reads it
+async function countVisit() {
+    let counted = false;
+    try { counted = localStorage.getItem("counted") === "1"; } catch { }
+    try {
+        const { count } = counted ? await api("/api/hits") : await api("/api/hits", { method: "POST" });
+        if (!counted) try { localStorage.setItem("counted", "1"); } catch { }
+        return count;
+    } catch {
+        return null;
+    }
+}
+
 renderDate();
 Promise.all([
     api("/api/me").catch(() => ({ admin: false })),
     api("/api/posts").catch(() => []),
     api("/api/quotes").catch(() => []),
-]).then(([me, posts, quotes]) => {
+    countVisit(),
+]).then(([me, posts, quotes, hits]) => {
     isAdmin = me.admin;
     postList = posts;
     quoteList = quotes;
+    hitCount = hits;
     renderChrome();
     route();
 });

@@ -12,6 +12,7 @@ import * as post from "./functions/api/posts/[id].js";
 import * as media from "./functions/media/[[path]].js";
 import * as quotes from "./functions/api/quotes.js";
 import * as comments from "./functions/api/comments.js";
+import * as hits from "./functions/api/hits.js";
 
 // Turns a file's onRequestGet/onRequestPost/... into { GET, POST, ... }
 const methods = (mod) => ({
@@ -33,6 +34,12 @@ const routes = [
     [/^\/api\/posts\/([^/]+)\/comments\/([^/]+)$/, { DELETE: comments.remove }, ["id", "cid"]],
     [/^\/api\/posts\/([^/]+)\/comments\/([^/]+)\/replies$/, { POST: comments.reply }, ["id", "cid"]],
     [/^\/api\/posts\/([^/]+)\/comments\/([^/]+)\/replies\/([^/]+)$/, { DELETE: comments.removeReply }, ["id", "cid", "rid"]],
+    // guestbook = same comment code, no post id
+    [/^\/api\/guestbook$/, { GET: comments.list, POST: comments.add }],
+    [/^\/api\/guestbook\/([^/]+)$/, { DELETE: comments.remove }, ["cid"]],
+    [/^\/api\/guestbook\/([^/]+)\/replies$/, { POST: comments.reply }, ["cid"]],
+    [/^\/api\/guestbook\/([^/]+)\/replies\/([^/]+)$/, { DELETE: comments.removeReply }, ["cid", "rid"]],
+    [/^\/api\/hits$/, methods(hits)],
 ];
 
 export default {

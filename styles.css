@@ -112,6 +112,27 @@ a:hover {
     image-rendering: pixelated; /* keep the pixels chunky */
 }
 
+/* the sardine that slides up into his mouth: sits between jaw and face.
+   Positions are in his own pixels out of 107 so it lines up at any size. */
+#buddy #buddy-food {
+    left: calc(52 / 107 * 100%);
+    top: calc(95 / 107 * 100%);
+    width: calc(5 / 107 * 100%);
+    height: calc(12 / 107 * 100%);
+    visibility: hidden;
+}
+
+#buddy #buddy-food.slurp {
+    visibility: visible;
+    animation: slurp 0.75s steps(16) forwards; /* 16 one-pixel steps up */
+}
+
+@keyframes slurp {
+    to {
+        transform: translateY(-133.33%); /* 16px up = fully behind his face */
+    }
+}
+
 /* ---------- quote of the day ---------- */
 #qotd-bar {
     display: flex;
@@ -356,6 +377,60 @@ h3 {
     left: -9999px;
 }
 
+/* ---------- odometer hit counter ---------- */
+.odo {
+    display: flex;
+    justify-content: center;
+    gap: 2px;
+    margin: 4px 0;
+}
+
+.odo span {
+    width: 18px;
+    padding: 2px 0;
+    background: black;
+    border: 1px solid var(--y-dim);
+    font: bold 16px "Courier New", monospace;
+    text-align: center;
+}
+
+.odo span:last-child {
+    background: var(--y); /* like the tenths wheel on a real odometer */
+    color: black;
+}
+
+.center {
+    text-align: center;
+}
+
+/* ---------- sardine can ---------- */
+.can-box {
+    display: flex;
+    justify-content: center;
+    padding: 8px 0;
+}
+
+.can {
+    width: 62px;
+    height: 40px;
+    image-rendering: pixelated;
+    cursor: grab;
+    touch-action: none; /* lets you drag on phones without scrolling */
+    user-select: none;
+    -webkit-user-drag: none;
+}
+
+.can.dragging {
+    position: fixed;
+    z-index: 100;
+    cursor: grabbing;
+    pointer-events: none;
+}
+
+.can.waiting {
+    visibility: hidden;
+}
+
 /* ---------- forms ---------- */
 label {
     display: block;
@@ -489,8 +564,8 @@ textarea {
         order: -1; /* main stuff first, side boxes after */
     }
 
-    #layout.with-right #leftnav {
-        display: none; /* home already lists posts */
+    #layout.with-right #leftnav .panel:first-child {
+        display: none; /* home already lists posts; keep the odometer */
     }
 
     .thumb {
