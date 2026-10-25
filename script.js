@@ -272,8 +272,8 @@ async function showHome() {
             el("a", { href: "#/about" }, "More..."))),
         panel("Feed Smooga",
             el("div", { class: "can-box" },
-                el("img", { class: "can", src: "img/sardines.png", alt: "Can of sardines", draggable: "false", onpointerdown: grabCan })),
-            el("p", { class: "muted center" }, "Drag the sardines to Smooga (or just tap them).")));
+                el("img", { class: "can", src: "img/sardinecan.png", alt: "Can of sardines", draggable: "false", onpointerdown: grabFish })),
+            el("p", { class: "muted center" }, "Pull out a sardine and dangle it in Smooga's mouth. Or just tap the can.")));
 }
 
 function showPosts() {
@@ -652,7 +652,7 @@ const food = document.getElementById("buddy-food");
 
 const HELLO = "audio/hello.wav";
 const EAT_SOUND = "audio/eat.wav";
-const FED_LINES = ["audio/fed1.wav", "audio/fed2.wav", "audio/fed3.wav", "audio/fed4.wav"]; // picks one at random
+const FED_LINES = ["audio/fed1.wav", "audio/fed2.wav", "audio/fed3.wav", "audio/fed4.wav"];
 const JAW_MAX = 4; // how far the jaw drops while talking, in his own pixels (he's 107px tall)
 const JAW_EAT = 4; // how wide he opens for the sardine
 
@@ -723,62 +723,127 @@ async function feed() {
         setJaw(0);
         await speak(EAT_SOUND); // chewing = jaw following the eating sound
         await wait(250);
-        await speak(FED_LINES[Math.floor(Math.random() * FED_LINES.length)]);
+        await speak(nextLine());
     } finally {
         busy = false;
     }
 }
 
-// Drag the can. A copy follows your mouse/finger; touch Smooga with it to feed him.
-// A quick tap (no drag) feeds him too, which helps on phones where he's far away.
-function grabCan(e) {
-    e.preventDefault();
-    const can = e.currentTarget;
-    const box = can.getBoundingClientRect();
-    const offX = e.clientX - box.left;
-    const offY = e.clientY - box.top;
-    const startX = e.clientX;
-    const startY = e.clientY;
-    let moved = false;
-    let fed = false;
+// Lines come out of a shuffled "bag": every line plays once before any
+// repeats, and the same line never plays twice in a row.
+let lineBag = [];
+let lastLine = null;
 
-    const ghost = can.cloneNode();
-    ghost.classList.add("dragging");
-    ghost.style.left = box.left + "px";
-    ghost.style.top = box.top + "px";
-    document.body.append(ghost);
-    can.classList.add("waiting");
-
-    function onMove(ev) {
-        if (Math.hypot(ev.clientX - startX, ev.clientY - startY) > 5) moved = true;
-        ghost.style.left = ev.clientX - offX + "px";
-        ghost.style.top = ev.clientY - offY + "px";
-        const g = ghost.getBoundingClientRect();
-        const b = buddy.getBoundingClientRect();
-        const touching = g.right > b.left && g.left < b.right && g.bottom > b.top && g.top < b.bottom;
-        if (touching && !fed && !busy) {
-            fed = true;
-            feed();
-            finish();
+function nextLine() {
+    if (!lineBag.length) {
+        lineBag = FED_LINES.slice();
+        for (let i = lineBag.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [lineBag[i], lineBag[j]] = [lineBag[j], lineBag[i]];
         }
+        if (lineBag[0] === lastLine && lineBag.length > 1) [lineBag[0], lineBag[1]] = [lineBag[1], lineBag[0]];
     }
+    lastLine = lineBag.shift();
+    return lastLine;
+}
 
-    function finish() {
+// ---------- pulling a sardine out of the can ----------
+// You hold it by the tail and it swings like a pendulum. Swing its head
+// into Smooga to feed him. Let go and it flies off with your mouse's speed.
+const TAIL_X = 3, TAIL_Y = 10.5; // where the tail is in sardine.png (matches .flying-fish in styles.css)
+const FISH_LEN = 80;             // tail to head, in pixels
+const GRAVITY = 3000;            // pixels per second², just picked to feel right
+const SWING_DAMPING = 5;       // higher = settles down faster
+
+function grabFish(e) {
+    e.preventDefault();
+    const fish = el("img", { src: "img/sardine.png", class: "flying-fish", alt: "", draggable: "false" });
+    document.body.append(fish);
+    document.body.classList.add("holding-fish");
+
+    const start = { x: e.clientX, y: e.clientY };
+    let pointer = { ...start };   // where the mouse/finger is
+    let pivot = { ...start };     // where the tail is
+    let vel = { x: 0, y: 0 };     // tail speed
+    let theta = 0;                // swing angle: 0 = hanging straight down
+    let omega = 0;                // swing speed
+    let holding = true;
+    let moved = false;
+    let last = performance.now();
+    const born = last;
+
+    const onMove = (ev) => {
+        pointer = { x: ev.clientX, y: ev.clientY };
+        if (Math.hypot(pointer.x - start.x, pointer.y - start.y) > 5) moved = true;
+    };
+    const onUp = () => {
+        holding = false;
+        stopListening();
+        document.body.classList.remove("holding-fish");
+        if (!moved) { fish.remove(); feed(); } // a tap = just feed him
+    };
+    const stopListening = () => {
         window.removeEventListener("pointermove", onMove);
         window.removeEventListener("pointerup", onUp);
-        window.removeEventListener("pointercancel", finish);
-        ghost.remove();
-        can.classList.remove("waiting");
-    }
-
-    function onUp() {
-        if (!moved && !fed) feed();
-        finish();
-    }
-
+        window.removeEventListener("pointercancel", onUp);
+    };
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
-    window.addEventListener("pointercancel", finish);
+    window.addEventListener("pointercancel", onUp);
+
+    const clamp = (v) => Math.max(-30000, Math.min(30000, v));
+
+    function draw() {
+        // the picture points tail→head to the right; turn it to match the swing
+        fish.style.transform =
+            `translate(${pivot.x - TAIL_X}px, ${pivot.y - TAIL_Y}px) rotate(${Math.PI / 2 - theta}rad)`;
+    }
+
+    function step(now) {
+        if (!fish.isConnected) return;
+        const dt = Math.min(0.033, (now - last) / 1000) || 0.016;
+        last = now;
+
+        if (holding) {
+            // how fast (and how suddenly) the tail is being yanked around
+            const newVel = { x: (pointer.x - pivot.x) / dt, y: (pointer.y - pivot.y) / dt };
+            const smoothed = { x: vel.x + (newVel.x - vel.x) * 0.5, y: vel.y + (newVel.y - vel.y) * 0.5 };
+            const acc = { x: clamp((smoothed.x - vel.x) / dt), y: clamp((smoothed.y - vel.y) / dt) };
+            vel = smoothed;
+            pivot = { ...pointer };
+
+            // pendulum: gravity pulls the head down, yanking the tail flings it the other way
+            const alpha = (-(GRAVITY - acc.y) * Math.sin(theta) - acc.x * Math.cos(theta)) / FISH_LEN - SWING_DAMPING * omega;
+            omega += alpha * dt;
+            theta += omega * dt;
+            draw();
+
+            // head inside Smooga = he eats it
+            const head = { x: pivot.x + FISH_LEN * Math.sin(theta), y: pivot.y + FISH_LEN * Math.cos(theta) };
+            const b = buddy.getBoundingClientRect();
+            if (!busy && head.x > b.left && head.x < b.right && head.y > b.top && head.y < b.bottom) {
+                holding = false;
+                stopListening();
+                document.body.classList.remove("holding-fish");
+                fish.remove();
+                feed();
+                return;
+            }
+        } else {
+            // let go: it keeps your mouse's speed, falls, and keeps spinning
+            vel.y += GRAVITY * dt;
+            pivot.x += vel.x * dt;
+            pivot.y += vel.y * dt;
+            theta += omega * dt;
+            draw();
+            const gone = pivot.y > innerHeight + 200 || pivot.x < -200 || pivot.x > innerWidth + 200 || now - born > 8000;
+            if (gone) { fish.remove(); return; }
+        }
+        requestAnimationFrame(step);
+    }
+
+    draw();
+    requestAnimationFrame(step);
 }
 
 // =====================================================================
