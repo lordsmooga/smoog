@@ -1,56 +1,58 @@
+/* ---------- base ---------- */
 body {
     color: rgb(255, 225, 0);
+    background-color: black;
     font-family: "Comic Sans MS", "Comic Sans", sans-serif;
-    min-height: 100vh;
-    display: flex;
     margin: 0;
     padding: 0 1rem;
-    flex-direction: column;
-    justify-content: flex-start;
-    align-items: center;
-    background-color: black;
 }
 
-p {
+a {
+    color: inherit;
+}
 
-    font-size: 2rem;
+/* ---------- SMOOGNET title ---------- */
+header {
+    text-align: center;
 }
 
 h1 {
     font-size: clamp(2rem, 12vw, 6rem);
-    margin-bottom: 10px;
+    margin: 0.67em 0 10px;
 }
 
-#smoog {
-    opacity: 0;
-    transition: opacity 0.4s;
+#home-link {
+    display: inline-block; /* lets us move it with transform */
+    text-decoration: none;
 }
 
-#smoog.visible {
-    opacity: 1;
-}
-
+#smoog,
 #net {
     opacity: 0;
     transition: opacity 0.4s;
 }
 
+#smoog.visible,
 #net.visible {
     opacity: 1;
 }
 
-#content {
-    opacity: 0;
-    transition: opacity 0.4s;
+/* after the intro: title sits small in the top-left */
+body.docked header {
+    text-align: left;
 }
 
-#content.visible {
-    opacity: 1;
+body.docked h1 {
+    font-size: 2rem;
+    margin: 1rem 0;
 }
 
+/* ---------- gate ---------- */
 #gate {
+    display: block;
+    margin: 0 auto;
     color: rgb(255, 225, 0);
-    font-family: "Comic Sans MS", "Comic Sans", sans-serif;
+    font-family: inherit;
     font-size: large;
     background: none;
     border: none;
@@ -60,4 +62,132 @@ h1 {
 
 #gate.gone {
     display: none;
+}
+
+/* ---------- page content ---------- */
+#content {
+    max-width: 720px;
+    margin: 0 auto;
+    padding-bottom: 4rem;
+    font-size: 1.15rem;
+    line-height: 1.5;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.4s, visibility 0.4s;
+}
+
+#content.visible {
+    opacity: 1;
+    visibility: visible;
+}
+
+.tagline {
+    font-size: 2rem;
+    margin-top: 0;
+}
+
+.muted {
+    opacity: 0.6;
+}
+
+.error {
+    color: #ff6b6b;
+}
+
+/* post list */
+.post-list {
+    list-style: none;
+    padding: 0;
+}
+
+.post-list li {
+    margin-bottom: 1rem;
+}
+
+.post-list a {
+    font-size: 1.4rem;
+}
+
+.date {
+    display: block;
+    font-size: 0.9rem;
+    opacity: 0.6;
+}
+
+/* single post */
+.post h2 {
+    font-size: 2rem;
+    margin: 0;
+    line-height: 1.2;
+}
+
+.post .date {
+    margin-bottom: 1.5rem;
+}
+
+.post-body img,
+.post-body video {
+    display: block;
+    max-width: 100%;
+    height: auto;
+    margin: 1rem 0;
+}
+
+/* buttons: bracket style, like the gate */
+.btn {
+    color: inherit;
+    font: inherit;
+    background: none;
+    border: none;
+    padding: 0;
+    margin: 0 1rem 0.5rem 0;
+    cursor: pointer;
+    text-decoration: none;
+}
+
+.btn:hover {
+    text-decoration: underline;
+}
+
+.btn:disabled {
+    opacity: 0.4;
+    cursor: default;
+    text-decoration: none;
+}
+
+.btn.danger {
+    color: #ff6b6b;
+}
+
+.admin-bar {
+    margin: 1rem 0;
+}
+
+/* forms */
+label {
+    display: block;
+    margin: 1rem 0 0.25rem;
+}
+
+input[type="text"],
+input[type="password"],
+textarea {
+    width: 100%;
+    box-sizing: border-box;
+    background: black;
+    color: inherit;
+    font: inherit;
+    border: 2px solid rgb(255, 225, 0);
+    padding: 0.5rem;
+}
+
+textarea {
+    min-height: 50vh;
+    resize: vertical;
+}
+
+.hint {
+    font-size: 0.9rem;
+    opacity: 0.6;
+    margin: 0.25rem 0 1rem;
 }
