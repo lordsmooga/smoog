@@ -567,6 +567,17 @@ textarea {
         order: -1; /* main stuff first, side boxes after */
     }
 
+    /* let the right column's boxes be placed one by one, so the
+       sardine box can jump to the top, close enough to drag to Smooga */
+    #rightcol {
+        display: contents;
+    }
+
+    #feed-box {
+        order: -2;
+        margin-bottom: 0;
+    }
+
     #layout.with-right #leftnav .panel:first-child {
         display: none; /* home already lists posts; keep the odometer */
     }

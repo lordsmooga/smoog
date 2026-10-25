@@ -270,10 +270,11 @@ async function showHome() {
         about && about.body.trim() && el("p", {},
             el("b", {}, "About me: "), excerptOf(about.body, 160), " ",
             el("a", { href: "#/about" }, "More..."))),
-        panel("Feed Smooga",
+        Object.assign(panel("Feed Smooga",
             el("div", { class: "can-box" },
                 el("img", { class: "can", src: "img/sardinecan.png?v=2", alt: "Can of sardines", draggable: "false", onpointerdown: grabFish })),
-            el("p", { class: "muted center" }, "Pull out a sardine and dangle it in Smooga's mouth. Or just tap the can.")));
+            el("p", { class: "muted center" }, "Pull out a sardine and dangle it in Smooga's mouth. Or just tap the can.")),
+            { id: "feed-box" })); // on phones, CSS moves this box to the top
 }
 
 function showPosts() {
