@@ -272,7 +272,7 @@ async function showHome() {
             el("a", { href: "#/about" }, "More..."))),
         panel("Feed Smooga",
             el("div", { class: "can-box" },
-                el("img", { class: "can", src: "img/sardinecan.png", alt: "Can of sardines", draggable: "false", onpointerdown: grabFish })),
+                el("img", { class: "can", src: "img/sardinecan.png?v=2", alt: "Can of sardines", draggable: "false", onpointerdown: grabFish })),
             el("p", { class: "muted center" }, "Pull out a sardine and dangle it in Smooga's mouth. Or just tap the can.")));
 }
 
@@ -752,12 +752,12 @@ function nextLine() {
 // into Smooga to feed him. Let go and it flies off with your mouse's speed.
 const TAIL_X = 3, TAIL_Y = 10.5; // where the tail is in sardine.png (matches .flying-fish in styles.css)
 const FISH_LEN = 80;             // tail to head, in pixels
-const GRAVITY = 3000;            // pixels per second², just picked to feel right
-const SWING_DAMPING = 5;       // higher = settles down faster
+const GRAVITY = 2400;            // pixels per second², just picked to feel right
+const SWING_DAMPING = 2.5;       // higher = settles down faster
 
 function grabFish(e) {
     e.preventDefault();
-    const fish = el("img", { src: "img/sardine.png", class: "flying-fish", alt: "", draggable: "false" });
+    const fish = el("img", { src: "img/sardine.png?v=2", class: "flying-fish", alt: "", draggable: "false" });
     document.body.append(fish);
     document.body.classList.add("holding-fish");
 
