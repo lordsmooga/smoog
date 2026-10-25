@@ -390,3 +390,42 @@ api("/api/me")
     .then((me) => { isAdmin = me.admin; })
     .catch(() => { })
     .finally(route);
+
+// =====================================================================
+//  BUDDY — click him and he says hi. The jaw drops further
+//  the louder the audio is at that moment.
+// =====================================================================
+const buddy = document.getElementById("buddy");
+const jaw = document.getElementById("buddy-jaw");
+const hello = new Audio("audio/hello.wav");
+const JAW_MAX = 4; // how far the jaw can drop, in his own pixels (he's 107px tall)
+let analyser, samples;
+
+buddy.addEventListener("click", () => {
+    // Web Audio lets us "listen" to the sound while it plays
+    if (!analyser) {
+        const ctx = new AudioContext();
+        analyser = ctx.createAnalyser();
+        analyser.fftSize = 512;
+        ctx.createMediaElementSource(hello).connect(analyser);
+        analyser.connect(ctx.destination);
+        samples = new Uint8Array(analyser.fftSize);
+        buddy.audioCtx = ctx;
+    }
+    buddy.audioCtx.resume();
+    hello.currentTime = 0;
+    hello.play().catch(() => { });
+    requestAnimationFrame(moveJaw);
+});
+
+let level = 0;
+function moveJaw() {
+    analyser.getByteTimeDomainData(samples);
+    let loudest = 0;
+    for (const s of samples) loudest = Math.max(loudest, Math.abs(s - 128)); // 128 = silence
+    level = Math.max(loudest, level * 0.8); // jaw snaps open, eases shut
+    const drop = hello.paused ? 0 : Math.round(Math.min(1, level / 40) * JAW_MAX);
+    jaw.style.transform = `translateY(${(drop / 107) * 100}%)`; // whole pixels only, stays chunky
+    if (hello.paused) level = 0;
+    else requestAnimationFrame(moveJaw);
+}
