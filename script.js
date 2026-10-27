@@ -16,7 +16,9 @@ const OWNER = "smoog"; // your name on comment replies (matches OWNER_NAME in fu
 let isAdmin = false;
 let postList = []; // newest first, no full bodies
 let quoteList = [];
-let hitCount = null; // visitor odometer
+let seriesList = []; // [{ id, title, blurb, postIds }]
+let imageList = []; // image-of-the-day rotation
+let iotdBox = null; // where today's image is shown (home page only)
 
 // =====================================================================
 //  HELPERS
@@ -91,6 +93,14 @@ const guard = (fn) => async (...args) => {
 async function refreshPosts() {
     postList = await api("/api/posts");
     renderChrome();
+}
+
+async function refreshSeries() {
+    seriesList = await api("/api/collections");
+}
+
+async function refreshImages() {
+    imageList = await api("/api/images");
 }
 
 async function refreshQuotes() {
@@ -169,14 +179,17 @@ function shuffledOrder(n, seed) {
     return order;
 }
 
-// Goes through every quote in a random order, one per day, before
-// reshuffling. Everybody sees the same quote on the same day.
-function quoteOfTheDay(quotes) {
-    if (!quotes.length) return null;
+// Goes through every item in a random order, one per day, before
+// reshuffling. Everybody sees the same one on the same day.
+// Used for both the quote and the image of the day.
+function pickOfTheDay(items, salt = 0) {
+    if (!items.length) return null;
     const day = dayNumber();
-    const n = quotes.length;
-    return quotes[shuffledOrder(n, Math.floor(day / n))[day % n]];
+    const n = items.length;
+    return items[shuffledOrder(n, Math.floor(day / n) + salt)[day % n]];
 }
+const quoteOfTheDay = (quotes) => pickOfTheDay(quotes);
+const imageOfTheDay = (images) => pickOfTheDay(images, 7777); // different shuffle than the quotes
 
 let shownDay = dayNumber();
 
@@ -205,6 +218,7 @@ setInterval(() => {
         shownDay = dayNumber();
         renderDate();
         renderQotd();
+        renderIotd();
     }
 }, 60000);
 
@@ -222,7 +236,9 @@ function renderChrome() {
     fill(subbar, isAdmin
         ? [el("b", {}, "WEBMASTER: "),
             el("a", { href: "#/new" }, "New post"),
+            el("a", { href: "#/series-new" }, "New series"),
             el("a", { href: "#/quotes" }, "Quotes"),
+            el("a", { href: "#/images" }, "Images"),
             el("a", { href: "#/edit-about" }, "Edit About")]
         : "Welcome to my website :D");
 
@@ -236,9 +252,9 @@ function renderChrome() {
                 el("li", {}, el("a", { href: postLink(p) }, p.title))))
             : el("p", { class: "muted" }, "Nothing yet."),
         postList.length > 12 && el("p", {}, el("a", { href: "#/posts" }, "More..."))),
-        hitCount != null && panel("Visitors",
-            el("div", { class: "odo" }, String(hitCount).padStart(6, "0").split("").map((d) => el("span", {}, d))),
-            el("div", { class: "muted center" }, "since 2026")));
+        seriesList.length > 0 && panel("Series",
+            el("ul", { class: "navlist" }, seriesList.map((s) =>
+                el("li", {}, el("a", { href: seriesLink(s) }, s.title))))));
 }
 
 // =====================================================================
@@ -274,7 +290,35 @@ async function showHome() {
             el("div", { class: "can-box" },
                 el("img", { class: "can", src: "img/sardinecan.png?v=2", alt: "Can of sardines", draggable: "false", onpointerdown: grabFish })),
             el("p", { class: "muted center" }, "Pull out a sardine and dangle it in Smooga's mouth. Or just tap the can.")),
-            { id: "feed-box" })); // on phones, CSS moves this box to the top
+            { id: "feed-box" }), // on phones, CSS moves this box to the top
+        panel("Image of the Day", iotdBox = el("div", { class: "iotd" })));
+    renderIotd();
+}
+
+function renderIotd() {
+    if (!iotdBox || !iotdBox.isConnected) return;
+    const img = imageOfTheDay(imageList);
+    fill(iotdBox,
+        img
+            ? [el("img", {
+                src: "/media/" + img.key, alt: img.caption || "Image of the day",
+                title: "Click to enlarge", onclick: () => openLightbox("/media/" + img.key, img.caption),
+            }),
+            img.caption && el("p", { class: "center" }, img.caption)]
+            : el("p", { class: "muted" }, "No image today."),
+        isAdmin && el("p", { class: "center" }, el("a", { href: "#/images", class: "hint" }, "edit")));
+}
+
+// Big view of an image. Click anywhere or press Esc to close.
+function openLightbox(src, caption) {
+    const close = () => { box.remove(); document.removeEventListener("keydown", onKey); };
+    const onKey = (e) => { if (e.key === "Escape") close(); };
+    const box = el("div", { class: "lightbox", onclick: close },
+        el("img", { src, alt: caption || "" }),
+        caption && el("p", {}, caption),
+        el("p", { class: "hint" }, "click anywhere to close"));
+    document.body.append(box);
+    document.addEventListener("keydown", onKey);
 }
 
 function showPosts() {
@@ -300,12 +344,19 @@ async function showPost(id) {
     const edited = fmtDate(post.updated) !== fmtDate(post.created);
     document.title = post.title + " — SMOOGNET";
     const commentsBox = el("div");
+    const inSeries = seriesList.filter((s) => s.postIds.includes(post.id));
     render(
         panel(fmtDate(post.created),
             el("h2", {}, post.title),
             edited && el("div", { class: "date" }, "edited " + fmtDate(post.updated)),
+            inSeries.map((s) => {
+                const parts = seriesPosts(s);
+                const n = parts.findIndex((p) => p.id === post.id) + 1;
+                return el("div", { class: "date" }, `Part ${n} of ${parts.length} in `, el("a", { href: seriesLink(s) }, s.title));
+            }),
             isAdmin && el("p", {}, el("a", { class: "btn", href: "#/edit/" + enc(post.id) }, "Edit")),
-            renderBody(post.body)),
+            renderBody(post.body),
+            inSeries.map((s) => seriesNav(s, post.id))),
         commentsBox,
     );
     await loadComments(`/api/posts/${enc(post.id)}/comments`, commentsBox);
@@ -483,6 +534,10 @@ async function showEditor(kind, id) {
     const fileInput = el("input", { type: "file", accept: "image/*,video/*", multiple: true, hidden: true });
     const addBtn = el("button", { class: "btn", type: "button", onclick: () => fileInput.click() }, "+ Photo / Video");
     const saveBtn = el("button", { class: "btn", type: "button", onclick: guard(save) }, post || isAbout ? "Save" : "Publish");
+    // which series this post belongs to
+    const seriesBoxes = isAbout ? [] : seriesList.map((s) => ({
+        s, box: el("input", { type: "checkbox", checked: !!post && s.postIds.includes(post.id) }),
+    }));
 
     fileInput.addEventListener("change", async () => {
         const files = [...fileInput.files];
@@ -522,6 +577,14 @@ async function showEditor(kind, id) {
             const saved = post
                 ? await api("/api/posts/" + enc(post.id), sendJSON("PUT", data))
                 : await api("/api/posts", sendJSON("POST", data));
+            // add to / remove from series
+            for (const { s, box } of seriesBoxes) {
+                const has = s.postIds.includes(saved.id);
+                if (box.checked === has) continue;
+                const postIds = box.checked ? [...s.postIds, saved.id] : s.postIds.filter((x) => x !== saved.id);
+                await api("/api/collections/" + enc(s.id), sendJSON("PUT", { ...s, postIds }));
+            }
+            await refreshSeries();
             await refreshPosts();
             location.hash = postLink(saved);
         } finally {
@@ -532,6 +595,7 @@ async function showEditor(kind, id) {
     async function remove() {
         if (!confirm("Delete this post (and its comments) for good?")) return;
         await api("/api/posts/" + enc(post.id), { method: "DELETE" });
+        await refreshSeries();
         await refreshPosts();
         location.hash = "#/posts";
     }
@@ -544,6 +608,9 @@ async function showEditor(kind, id) {
         status,
         el("p", { class: "hint" },
             "Blank line = new paragraph. Photos/videos show up wherever their [photo:…] or [video:…] line sits — move or delete those lines like any other text."),
+        seriesBoxes.length > 0 && [
+            el("label", {}, "Part of a series?"),
+            el("div", { class: "checklist" }, seriesBoxes.map(({ s, box }) => el("label", {}, box, " " + s.title)))],
         el("p", {},
             saveBtn,
             el("a", { class: "btn", href: isAbout ? "#/about" : post ? postLink(post) : "#/" }, "Cancel"),
@@ -589,6 +656,186 @@ function showQuotes() {
             el("label", { for: "q-by" }, "Who said it (optional)"), by,
             el("p", {}, el("button", { class: "btn", type: "submit" }, "Add quote")))));
     text.focus();
+}
+
+// =====================================================================
+//  SERIES — named groups of posts, like every Civic post.
+//  Posts in a series are always shown oldest first (Part 1, Part 2...).
+// =====================================================================
+const seriesLink = (s) => "#/series/" + enc(s.id);
+
+// the series' posts that still exist, oldest first
+function seriesPosts(s) {
+    return postList.filter((p) => s.postIds.includes(p.id)).sort((a, b) => a.created.localeCompare(b.created));
+}
+
+function seriesSpan(posts) {
+    if (!posts.length) return "no posts yet";
+    const month = (p) => new Date(p.created).toLocaleDateString("en-US", { month: "short", year: "numeric" });
+    const first = month(posts[0]), last = month(posts.at(-1));
+    return `${posts.length} post${posts.length === 1 ? "" : "s"} · ${first === last ? first : first + " – " + last}`;
+}
+
+// "‹ previous | next ›" box at the bottom of a post that's in a series
+function seriesNav(s, postId) {
+    const parts = seriesPosts(s);
+    const i = parts.findIndex((p) => p.id === postId);
+    const prev = parts[i - 1], next = parts[i + 1];
+    return el("div", { class: "series-nav" },
+        el("div", { class: "series-nav-title" }, el("a", { href: seriesLink(s) }, s.title), ` — part ${i + 1} of ${parts.length}`),
+        el("div", { class: "series-nav-links" },
+            prev ? el("a", { href: postLink(prev) }, "‹ " + prev.title) : el("span", { class: "muted" }, "‹ start"),
+            next ? el("a", { href: postLink(next) }, next.title + " ›") : el("span", { class: "muted" }, "latest ›")));
+}
+
+function showSeriesList() {
+    document.title = "Series — SMOOGNET";
+    // most recently updated series first
+    const sorted = seriesList.map((s) => ({ s, posts: seriesPosts(s) }))
+        .sort((a, b) => (b.posts.at(-1)?.created || b.s.created).localeCompare(a.posts.at(-1)?.created || a.s.created));
+    render(panel("Series",
+        isAdmin && el("p", {}, el("a", { class: "btn", href: "#/series-new" }, "New series")),
+        sorted.length === 0 && el("p", { class: "muted" }, "No series yet."),
+        el("ul", { class: "series-list" }, sorted.map(({ s, posts }) => {
+            const cover = [...posts].reverse().find((p) => p.thumb);
+            return el("li", {},
+                cover && el("a", { href: seriesLink(s) }, el("img", { class: "series-thumb", src: "/media/" + cover.thumb, alt: "" })),
+                el("div", {},
+                    el("a", { href: seriesLink(s), class: "series-title" }, s.title),
+                    el("div", { class: "date" }, seriesSpan(posts)),
+                    s.blurb && el("p", {}, s.blurb)));
+        }))));
+}
+
+function showSeries(sid) {
+    const s = seriesList.find((x) => x.id === sid);
+    if (!s) throw new Error("Series not found");
+    document.title = s.title + " — SMOOGNET";
+    const posts = seriesPosts(s);
+    render(panel("Series",
+        el("h2", {}, s.title),
+        el("div", { class: "date" }, seriesSpan(posts)),
+        s.blurb && el("p", {}, s.blurb),
+        isAdmin && el("p", {}, el("a", { class: "btn", href: "#/series-edit/" + enc(s.id) }, "Edit series")),
+        posts.length === 0
+            ? el("p", { class: "muted" }, "Nothing in this series yet.")
+            : el("ol", { class: "series-parts" }, posts.map((p) =>
+                el("li", {},
+                    p.thumb && el("a", { href: postLink(p) }, el("img", { class: "series-thumb small", src: "/media/" + p.thumb, alt: "" })),
+                    el("div", {},
+                        el("a", { href: postLink(p) }, p.title),
+                        el("div", { class: "date" }, fmtDate(p.created)),
+                        p.excerpt && el("p", { class: "excerpt" }, p.excerpt)))))));
+}
+
+function showSeriesEditor(sid) {
+    if (!isAdmin) { location.hash = "#/login"; return; }
+    const existing = sid ? seriesList.find((x) => x.id === sid) : null;
+    if (sid && !existing) throw new Error("Series not found");
+    document.title = (existing ? "Edit series" : "New series") + " — SMOOGNET";
+
+    const title = el("input", { type: "text", id: "s-title", maxlength: 120, value: existing ? existing.title : "" });
+    const blurb = el("textarea", { id: "s-blurb", rows: 3, maxlength: 1000 });
+    blurb.value = existing ? existing.blurb : "";
+    const boxes = postList.map((p) => ({ p, box: el("input", { type: "checkbox", checked: !!existing && existing.postIds.includes(p.id) }) }));
+
+    async function save() {
+        if (!title.value.trim()) throw new Error("Give the series a title.");
+        const data = { title: title.value, blurb: blurb.value, postIds: boxes.filter((b) => b.box.checked).map((b) => b.p.id) };
+        const saved = existing
+            ? await api("/api/collections/" + enc(existing.id), sendJSON("PUT", data))
+            : await api("/api/collections", sendJSON("POST", data));
+        await refreshSeries();
+        renderChrome();
+        location.hash = seriesLink(saved);
+    }
+    async function remove() {
+        if (!confirm(`Delete the series "${existing.title}"? (The posts stay.)`)) return;
+        await api("/api/collections/" + enc(existing.id), { method: "DELETE" });
+        await refreshSeries();
+        renderChrome();
+        location.hash = "#/series";
+    }
+
+    render(panel(existing ? "Edit series" : "New series",
+        el("label", { for: "s-title" }, "Title"), title,
+        el("label", { for: "s-blurb" }, "Description (optional)"), blurb,
+        el("label", {}, "Posts in this series"),
+        postList.length === 0
+            ? el("p", { class: "muted" }, "No posts yet.")
+            : el("div", { class: "checklist" }, boxes.map(({ p, box }) =>
+                el("label", {}, box, " " + p.title, el("span", { class: "muted" }, " — " + fmtDate(p.created))))),
+        el("p", { class: "hint" }, "They'll show up oldest first, as Part 1, Part 2, and so on. You can also tick series from a post's own editor."),
+        el("p", {},
+            el("button", { class: "btn", type: "button", onclick: guard(save) }, existing ? "Save" : "Create series"),
+            el("a", { class: "btn", href: existing ? seriesLink(existing) : "#/series" }, "Cancel"),
+            existing && el("button", { class: "btn", type: "button", onclick: guard(remove) }, "Delete series"))));
+    if (!existing) title.focus();
+}
+
+// =====================================================================
+//  IMAGE OF THE DAY MANAGER (you only)
+// =====================================================================
+function showImages() {
+    if (!isAdmin) { location.hash = "#/login"; return; }
+    document.title = "Images — SMOOGNET";
+    const today = imageOfTheDay(imageList);
+    const fileInput = el("input", { type: "file", accept: "image/*", hidden: true });
+    const caption = el("input", { type: "text", id: "i-caption", maxlength: 300 });
+    const status = el("p", { class: "hint" });
+    const addBtn = el("button", { class: "btn", type: "button", onclick: () => fileInput.click() }, "Choose image + add");
+
+    fileInput.addEventListener("change", guard(async () => {
+        const file = fileInput.files[0];
+        fileInput.value = "";
+        if (!file) return;
+        addBtn.disabled = true;
+        try {
+            status.textContent = "Uploading…";
+            const result = await uploadFile(await shrinkImage(file), (pct) => { status.textContent = `Uploading… ${Math.round(pct * 100)}%`; });
+            if (result.kind !== "photo") throw new Error("That's not an image");
+            await api("/api/images", sendJSON("POST", { key: result.key, caption: caption.value }));
+            await refreshImages();
+            showImages();
+        } finally {
+            addBtn.disabled = false;
+            status.textContent = "";
+        }
+    }));
+
+    render(panel("Image of the day",
+        el("p", { class: "muted" },
+            "Same rules as the quotes: one per day at random, all of them before any repeat, everyone sees the same one."),
+        el("h3", {}, "Add an image"),
+        el("label", { for: "i-caption" }, "Caption (optional) — type it first, then pick the image"),
+        caption,
+        el("p", {}, addBtn, fileInput), status,
+        el("h3", {}, `In the rotation (${imageList.length})`),
+        imageList.length === 0 && el("p", { class: "muted" }, "None yet."),
+        el("ul", { class: "image-list" }, imageList.map((img) => {
+            const cap = el("input", { type: "text", maxlength: 300, value: img.caption || "", placeholder: "caption" });
+            return el("li", {},
+                el("img", { src: "/media/" + img.key, alt: "", onclick: () => openLightbox("/media/" + img.key, img.caption) }),
+                el("div", {},
+                    img === today && el("b", {}, "← today's image"),
+                    cap,
+                    el("p", {},
+                        el("button", {
+                            class: "btn small", onclick: guard(async () => {
+                                await api("/api/images/" + enc(img.id), sendJSON("PUT", { caption: cap.value }));
+                                await refreshImages();
+                                showImages();
+                            }),
+                        }, "Save caption"),
+                        el("button", {
+                            class: "btn small", onclick: guard(async () => {
+                                if (!confirm("Take this image out of the rotation?")) return;
+                                await api("/api/images/" + enc(img.id), { method: "DELETE" });
+                                await refreshImages();
+                                showImages();
+                            }),
+                        }, "Remove"))));
+        }))));
 }
 
 // =====================================================================
@@ -851,12 +1098,17 @@ function grabFish(e) {
 //  ROUTER — the part after # in the URL decides what page to show
 //    #/              home          #/post/ID      one post
 //    #/posts         all posts     #/about        about page
-//    #/guestbook     guestbook
+//    #/guestbook     guestbook     #/series       all series
+//    #/series/ID     one series    #/series-new, #/series-edit/ID, #/images  (you only)
 //    #/new           new post      #/edit/ID      edit post
 //    #/edit-about    edit about    #/quotes       manage quotes
 //    #/login         sign in
 // =====================================================================
-const TAB_FOR = { home: "home", posts: "posts", post: "posts", new: "posts", edit: "posts", guestbook: "guestbook", about: "about", "edit-about": "about" };
+const TAB_FOR = {
+    home: "home", posts: "posts", post: "posts", new: "posts", edit: "posts",
+    series: "series", "series-new": "series", "series-edit": "series",
+    guestbook: "guestbook", about: "about", "edit-about": "about",
+};
 
 async function route() {
     const parts = location.hash.replace(/^#\/?/, "").split("/").filter(Boolean);
@@ -874,6 +1126,11 @@ async function route() {
         if (page === "home") await showHome();
         else if (page === "posts") showPosts();
         else if (page === "post" && id) await showPost(id);
+        else if (page === "series" && id) showSeries(id);
+        else if (page === "series") showSeriesList();
+        else if (page === "series-new") showSeriesEditor();
+        else if (page === "series-edit" && id) showSeriesEditor(id);
+        else if (page === "images") showImages();
         else if (page === "guestbook") await showGuestbook();
         else if (page === "about") await showAbout();
         else if (page === "new") await showEditor("post");
@@ -891,30 +1148,19 @@ window.addEventListener("hashchange", route);
 
 // ---------- start up ----------
 
-// Adds 1 to the odometer the first time this browser visits, otherwise just reads it
-async function countVisit() {
-    let counted = false;
-    try { counted = localStorage.getItem("counted") === "1"; } catch { }
-    try {
-        const { count } = counted ? await api("/api/hits") : await api("/api/hits", { method: "POST" });
-        if (!counted) try { localStorage.setItem("counted", "1"); } catch { }
-        return count;
-    } catch {
-        return null;
-    }
-}
-
 renderDate();
 Promise.all([
     api("/api/me").catch(() => ({ admin: false })),
     api("/api/posts").catch(() => []),
     api("/api/quotes").catch(() => []),
-    countVisit(),
-]).then(([me, posts, quotes, hits]) => {
+    api("/api/collections").catch(() => []),
+    api("/api/images").catch(() => []),
+]).then(([me, posts, quotes, series, images]) => {
     isAdmin = me.admin;
     postList = posts;
     quoteList = quotes;
-    hitCount = hits;
+    seriesList = series;
+    imageList = images;
     renderChrome();
     route();
 });

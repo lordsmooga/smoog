@@ -1,4 +1,4 @@
-import { json, requireAdmin, readPosts, updateJSON, cleanInput, commentsKey, HttpError, POSTS_KEY } from "../../_lib.js";
+import { json, requireAdmin, readPosts, readJSON, updateJSON, cleanInput, commentsKey, HttpError, POSTS_KEY } from "../../_lib.js";
 
 // GET /api/posts/:id — one full post
 export async function onRequestGet({ env, params }) {
@@ -29,5 +29,12 @@ export async function onRequestDelete({ request, env, params }) {
         posts.splice(i, 1);
     });
     await env.BUCKET.delete(commentsKey(params.id));
+    // take it out of any series it was in
+    const series = await readJSON(env, "collections.json", []);
+    if (series.some((s) => s.postIds.includes(params.id))) {
+        await updateJSON(env, "collections.json", [], (all) => {
+            all.forEach((s) => { s.postIds = s.postIds.filter((id) => id !== params.id); });
+        });
+    }
     return json({ ok: true });
 }

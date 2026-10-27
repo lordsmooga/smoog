@@ -377,26 +377,34 @@ h3 {
     left: -9999px;
 }
 
-/* ---------- odometer hit counter ---------- */
-.odo {
-    display: flex;
-    justify-content: center;
-    gap: 2px;
-    margin: 4px 0;
+/* ---------- pinball ---------- */
+.pinball-panel .panel-body {
+    padding: 8px 0;
 }
 
-.odo span {
-    width: 18px;
-    padding: 2px 0;
-    background: black;
+.pinball canvas {
+    display: block;
+    width: 162px; /* 160 game pixels + 1px border each side = 1 screen pixel per game pixel */
+    margin: 0 auto;
+    image-rendering: pixelated;
+    touch-action: none;
     border: 1px solid var(--y-dim);
-    font: bold 16px "Courier New", monospace;
-    text-align: center;
+    outline: none;
 }
 
-.odo span:last-child {
-    background: var(--y); /* like the tenths wheel on a real odometer */
-    color: black;
+.pinball canvas:focus {
+    border-color: var(--y);
+}
+
+.pinball-scores {
+    margin: 8px 0 0;
+    padding: 0 0 0 44px;
+    font: bold 13px "Courier New", monospace;
+    white-space: pre;
+}
+
+.pinball .hint {
+    margin: 4px 8px 0;
 }
 
 .center {
@@ -432,6 +440,157 @@ h3 {
 body.holding-fish,
 body.holding-fish * {
     cursor: grabbing !important;
+}
+
+/* ---------- image of the day ---------- */
+.iotd img {
+    display: block;
+    width: 100%;
+    max-height: 260px;
+    object-fit: cover;
+    border: 1px solid var(--y-dim);
+    cursor: zoom-in;
+}
+
+.iotd p {
+    margin: 6px 0 0;
+}
+
+.lightbox {
+    position: fixed;
+    inset: 0;
+    z-index: 200;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: rgba(0, 0, 0, 0.88);
+    cursor: zoom-out;
+    text-align: center;
+}
+
+.lightbox img {
+    max-width: 100%;
+    max-height: 82vh;
+    border: 2px solid var(--y);
+}
+
+.lightbox p {
+    margin: 8px 0 0;
+}
+
+.image-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.image-list li {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    padding: 8px 0;
+    border-bottom: 1px dotted var(--y-dim);
+}
+
+.image-list img {
+    width: 120px;
+    height: 90px;
+    object-fit: cover;
+    border: 1px solid var(--y-dim);
+    cursor: zoom-in;
+    flex: none;
+}
+
+.image-list li > div {
+    flex: 1;
+}
+
+/* ---------- series ---------- */
+.series-list,
+.series-parts {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.series-list li,
+.series-parts li {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    padding: 10px 0;
+    border-bottom: 1px dotted var(--y-dim);
+}
+
+.series-parts {
+    counter-reset: part;
+}
+
+.series-parts li::before {
+    counter-increment: part;
+    content: "PART " counter(part);
+    flex: none;
+    width: 52px;
+    font-weight: bold;
+    font-size: 11px;
+    color: var(--y-dim);
+    padding-top: 2px;
+}
+
+.series-title {
+    font-size: 16px;
+}
+
+.series-thumb {
+    width: 120px;
+    height: 90px;
+    object-fit: cover;
+    border: 1px solid var(--y-dim);
+    flex: none;
+}
+
+.series-thumb.small {
+    width: 80px;
+    height: 60px;
+}
+
+.series-list p,
+.series-parts .excerpt {
+    margin: 4px 0 0;
+}
+
+.series-nav {
+    margin-top: 16px;
+    padding: 8px 10px;
+    border: 1px solid var(--y-dim);
+    background: var(--y-dark);
+}
+
+.series-nav-title {
+    font-weight: bold;
+    margin-bottom: 4px;
+}
+
+.series-nav-links {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.checklist {
+    max-height: 320px;
+    overflow-y: auto;
+    padding: 4px 8px;
+    border: 2px inset var(--y-dim);
+    background: black;
+}
+
+.checklist label {
+    margin: 4px 0;
+    font-weight: normal;
+    cursor: pointer;
 }
 
 /* ---------- forms ---------- */
@@ -554,8 +713,21 @@ textarea {
     }
 
     #tabs a[data-tab] {
-        padding: 8px 12px;
-        font-size: 14px;
+        padding: 8px 7px;
+        font-size: 13px;
+    }
+
+    #signin {
+        padding: 0 6px;
+    }
+
+    .series-thumb {
+        width: 80px;
+        height: 60px;
+    }
+
+    .series-parts .excerpt {
+        display: none;
     }
 
     #layout,
@@ -579,7 +751,16 @@ textarea {
     }
 
     #layout.with-right #leftnav .panel:first-child {
-        display: none; /* home already lists posts; keep the odometer */
+        display: none; /* home already lists posts; keep the pinball */
+    }
+
+    .pinball canvas {
+        width: 322px; /* 2 screen pixels per game pixel (+ border) */
+        max-width: 100%;
+    }
+
+    .pinball-scores {
+        padding-left: calc(50% - 70px);
     }
 
     .thumb {

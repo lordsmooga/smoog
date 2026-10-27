@@ -12,7 +12,9 @@ import * as post from "./functions/api/posts/[id].js";
 import * as media from "./functions/media/[[path]].js";
 import * as quotes from "./functions/api/quotes.js";
 import * as comments from "./functions/api/comments.js";
-import * as hits from "./functions/api/hits.js";
+import * as pinball from "./functions/api/pinball.js"; // shelved for now, kept for later
+import * as collections from "./functions/api/collections.js";
+import * as images from "./functions/api/images.js";
 
 // Turns a file's onRequestGet/onRequestPost/... into { GET, POST, ... }
 const methods = (mod) => ({
@@ -39,7 +41,13 @@ const routes = [
     [/^\/api\/guestbook\/([^/]+)$/, { DELETE: comments.remove }, ["cid"]],
     [/^\/api\/guestbook\/([^/]+)\/replies$/, { POST: comments.reply }, ["cid"]],
     [/^\/api\/guestbook\/([^/]+)\/replies\/([^/]+)$/, { DELETE: comments.removeReply }, ["cid", "rid"]],
-    [/^\/api\/hits$/, methods(hits)],
+    [/^\/api\/pinball$/, methods(pinball)],
+    // series of posts
+    [/^\/api\/collections$/, { GET: collections.list, POST: collections.add }],
+    [/^\/api\/collections\/([^/]+)$/, { PUT: collections.update, DELETE: collections.remove }, ["sid"]],
+    // image of the day
+    [/^\/api\/images$/, { GET: images.list, POST: images.add }],
+    [/^\/api\/images\/([^/]+)$/, { PUT: images.update, DELETE: images.remove }, ["iid"]],
 ];
 
 export default {
